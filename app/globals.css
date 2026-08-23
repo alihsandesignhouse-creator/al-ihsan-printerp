@@ -1,0 +1,262 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ─── CSS Custom Properties (shadcn/ui compatibility) ─────────────────────── */
+@layer base {
+  :root {
+    --background: 0 0% 98%;
+    --foreground: 222 47% 11%;
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+    --primary: 221 83% 40%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 199 89% 48%;
+    --secondary-foreground: 0 0% 100%;
+    --muted: 220 14% 96%;
+    --muted-foreground: 220 9% 46%;
+    --accent: 38 92% 50%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 220 13% 91%;
+    --input: 220 13% 91%;
+    --ring: 221 83% 40%;
+    --radius: 0.5rem;
+  }
+}
+
+/* ─── Base Styles ─────────────────────────────────────────────────────────── */
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: 'Inter', 'Noto Sans Bengali', sans-serif;
+    /* বাগ-ফিক্স (২১ আগস্ট ২০২৬, মোবাইল-রেসপন্সিভ গভীর অডিট): এই
+       "safety net"-টা আগে ছিল না। কোনো একটা কম্পোনেন্টে (এখন বা
+       ভবিষ্যতে) কোথাও একটা লম্বা না-ভাঙা টেক্সট বা সামান্য বেশি-চওড়া
+       এলিমেন্ট থেকে গেলে পুরো পেজ পাশে (horizontally) স্ক্রল হতে
+       শুরু করত — এটা মোবাইলে সবচেয়ে "অপ্রফেশনাল" লাগা বাগগুলোর একটা,
+       কারণ পুরো পেজ ডানে-বামে টলমল করে। এখন body-স্তরে horizontal
+       overflow ব্লক করা আছে — প্রতিটা টেবিল/উপাদান আলাদাভাবে নিখুঁত
+       না হলেও পুরো পেজ কখনো পাশে স্ক্রল করবে না, শুধু সেই নির্দিষ্ট
+       উপাদানটুকু কেটে যাবে (যেটা এমনিতেও প্রতিটা টেবিলে overflow-x-auto
+       wrapper দিয়ে আলাদাভাবে হ্যান্ডল করা আছে)। */
+    overflow-x: hidden;
+  }
+
+  /* Bengali headings use Hind Siliguri */
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Hind Siliguri', 'Noto Sans Bengali', sans-serif;
+  }
+
+  /* Numbers in data tables use monospace */
+  .font-data {
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  /* Remove number input arrows */
+  input[type='number']::-webkit-outer-spin-button,
+  input[type='number']::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+  input[type='number'] {
+    -moz-appearance: textfield;
+  }
+
+  /* Focus visible outline */
+  :focus-visible {
+    @apply outline-none ring-2 ring-brand-primary ring-offset-1;
+  }
+}
+
+/* ─── Component Layer ─────────────────────────────────────────────────────── */
+@layer components {
+  /* ── Status Badges ─────────────────────────────────────────────────────── */
+  .badge-pending { @apply bg-blue-100 text-blue-700 rounded-full px-2.5 py-0.5 text-xs font-medium; }
+  .badge-in-progress { @apply bg-amber-100 text-amber-700 rounded-full px-2.5 py-0.5 text-xs font-medium; }
+  .badge-ready { @apply bg-emerald-100 text-emerald-700 rounded-full px-2.5 py-0.5 text-xs font-medium; }
+  .badge-delivered { @apply bg-green-100 text-green-800 rounded-full px-2.5 py-0.5 text-xs font-medium; }
+  .badge-cancelled { @apply bg-red-100 text-red-700 rounded-full px-2.5 py-0.5 text-xs font-medium; }
+  .badge-trial { @apply bg-purple-100 text-purple-700 rounded-full px-2.5 py-0.5 text-xs font-medium; }
+  .badge-active { @apply bg-green-100 text-green-700 rounded-full px-2.5 py-0.5 text-xs font-medium; }
+  .badge-suspended { @apply bg-amber-100 text-amber-700 rounded-full px-2.5 py-0.5 text-xs font-medium; }
+  .badge-expired { @apply bg-red-100 text-red-700 rounded-full px-2.5 py-0.5 text-xs font-medium; }
+
+  /* ── Sidebar ───────────────────────────────────────────────────────────── */
+  .sidebar-nav-item {
+    @apply flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-[#94A3B8] transition-colors duration-150;
+  }
+  .sidebar-nav-item:hover {
+    @apply bg-white/5 text-white;
+  }
+  .sidebar-nav-item.active {
+    @apply bg-brand-primary/20 text-white border-l-4 border-brand-primary -ml-[1px] pl-[13px];
+  }
+  .sidebar-section-label {
+    @apply px-3 py-1 text-xs font-semibold text-neutral-600 uppercase tracking-wider;
+  }
+
+  /* ── Form Inputs ───────────────────────────────────────────────────────── */
+  .form-input {
+    @apply h-10 w-full border border-neutral-200 rounded-lg px-3 text-sm bg-white
+           transition-colors focus:border-brand-primary focus:ring-1 focus:ring-brand-primary
+           focus:outline-none placeholder:text-neutral-400;
+  }
+  .form-input-error {
+    @apply border-red-400 focus:border-red-400 focus:ring-red-400;
+  }
+  .form-input-mobile {
+    @apply h-12; /* Larger touch target on mobile */
+  }
+  .form-label {
+    @apply block text-sm font-medium text-neutral-700 mb-1;
+  }
+  .form-error {
+    @apply text-xs text-red-500 mt-1;
+  }
+  .form-hint {
+    @apply text-xs text-neutral-500 mt-1;
+  }
+
+  /* ── KPI Cards ─────────────────────────────────────────────────────────── */
+  .kpi-card {
+    @apply bg-white rounded-xl border border-neutral-200 p-4 shadow-card
+           hover:shadow-card-hover transition-shadow duration-150 cursor-pointer;
+  }
+  .kpi-card-value {
+    @apply text-2xl font-bold text-neutral-900 font-data;
+  }
+  .kpi-card-label {
+    @apply text-sm text-neutral-500 font-medium mt-0.5;
+  }
+  .kpi-card-change-up {
+    @apply text-xs text-emerald-600 font-medium;
+  }
+  .kpi-card-change-down {
+    @apply text-xs text-red-500 font-medium;
+  }
+
+  /* ── Page Header ───────────────────────────────────────────────────────── */
+  .page-header {
+    @apply flex items-center justify-between mb-6;
+  }
+  .page-title {
+    @apply text-xl font-bold text-neutral-900;
+    font-family: 'Hind Siliguri', 'Noto Sans Bengali', sans-serif;
+  }
+  .page-subtitle {
+    @apply text-sm text-neutral-500 mt-0.5;
+  }
+
+  /* ── Table ─────────────────────────────────────────────────────────────── */
+  .data-table {
+    @apply w-full text-sm;
+  }
+  .data-table thead th {
+    @apply px-4 py-3 text-left text-xs font-semibold text-neutral-500 uppercase tracking-wider bg-neutral-50 border-b border-neutral-200;
+  }
+  .data-table tbody tr {
+    @apply border-b border-neutral-100 hover:bg-neutral-50 transition-colors;
+  }
+  .data-table tbody td {
+    @apply px-4 py-3 text-neutral-700;
+  }
+
+  /* ── Offline indicator dot ─────────────────────────────────────────────── */
+  .status-dot-online {
+    @apply w-2 h-2 rounded-full bg-green-500 inline-block;
+  }
+  .status-dot-offline {
+    @apply w-2 h-2 rounded-full bg-red-500 inline-block;
+  }
+  .status-dot-syncing {
+    @apply w-2 h-2 rounded-full bg-yellow-500 inline-block animate-pulse;
+  }
+}
+
+/* ─── Print Styles ────────────────────────────────────────────────────────── */
+@media print {
+  /* Hide everything that's not the challan */
+  nav,
+  aside,
+  header,
+  .sidebar,
+  .no-print,
+  button,
+  [data-print-hide] {
+    display: none !important;
+  }
+
+  /* Reset page */
+  body {
+    background: white !important;
+    color: black !important;
+    font-size: 12pt;
+  }
+
+  /* Challan container */
+  .print-only,
+  [data-print-content] {
+    display: block !important;
+  }
+
+  /* Page breaks */
+  .page-break-before {
+    page-break-before: always;
+  }
+  .page-break-after {
+    page-break-after: always;
+  }
+  .avoid-break {
+    page-break-inside: avoid;
+  }
+
+  /* Borders in print */
+  table {
+    border-collapse: collapse;
+  }
+  table, th, td {
+    border: 1px solid #000 !important;
+  }
+  th {
+    background-color: #f5f5f5 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}
+
+/* ─── Skeleton Loading ────────────────────────────────────────────────────── */
+@keyframes skeleton-loading {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.skeleton {
+  background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+  background-size: 200% 100%;
+  animation: skeleton-loading 1.5s infinite;
+  border-radius: 4px;
+}
+
+/* ─── Scrollbar ───────────────────────────────────────────────────────────── */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+::-webkit-scrollbar-thumb {
+  background: #c5c5c5;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #a0a0a0;
+}

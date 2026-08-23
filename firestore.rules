@@ -1,0 +1,876 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---------- Helper functions ----------
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isSuperAdmin() {
+      return isSignedIn() && request.auth.token.role == 'super_admin';
+    }
+
+    function belongsToTenant(tenantId) {
+      return isSignedIn() && request.auth.token.tenantId == tenantId;
+    }
+
+    // isActiveUser(tenantId) — SECURITY FIX (audit item #1, ৩০ জুলাই ২০২৬):
+    // request.auth.token.isActive is a JWT custom claim, baked in at
+    // token-mint time and only refreshed on the client's next token
+    // refresh (up to ~1 hour later by default, or effectively never for an
+    // already-open session/raw Firestore SDK call that keeps reusing its
+    // current token). Relying on the claim alone means that once a
+    // tenant is suspended or its trial expires, every one of that
+    // tenant's *already-authenticated* users (this includes staff, whose
+    // claims were never being updated at all — see MODULE_README.md for
+    // the full writeup) could keep reading/writing every tenant-scoped
+    // collection directly via the Firestore SDK until their token
+    // happened to refresh naturally.
+    //
+    // The get() below cross-checks the *current* tenant document's
+    // isActive field on every single rule evaluation, closing that
+    // window immediately regardless of any individual user's token
+    // staleness — this is the Firebase-recommended pattern for
+    // "revoke access now" in multi-tenant apps (data-dependent claim
+    // checks). get()/exists() calls inside rules do not themselves
+    // re-run security rules on the fetched path (no recursion risk, even
+    // when called from within the /tenants/{tenantId} match block itself).
+    //
+    // Cost: one extra document read per rule evaluation, on every single
+    // tenant-scoped Firestore operation in the app, forever — a
+    // deliberate, documented trade-off of a small constant read-cost
+    // increase for closing a real access-control gap. If this read cost
+    // ever becomes a measured problem, an alternative mitigation would be
+    // to shorten the Firebase Auth ID token lifetime and rely purely on
+    // claims propagation (see fix to onSetTenantSuspended /
+    // checkTrialExpiry below) instead of this live check — not done here
+    // because that alone still leaves up to the token's full lifetime as
+    // an exposure window, which this get() check removes entirely.
+    function isActiveUser(tenantId) {
+      return isSignedIn() && request.auth.token.isActive == true
+          && get(/databases/$(database)/documents/tenants/$(tenantId)).data.isActive == true;
+    }
+
+    function role() {
+      return request.auth.token.role;
+    }
+
+    function isTenantAdmin() {
+      return role() == 'tenant_admin';
+    }
+
+    function isBranchManager() {
+      return role() == 'branch_manager';
+    }
+
+    function isStaff() {
+      return role() == 'commission_staff' || role() == 'regular_staff';
+    }
+
+    function userBranchId() {
+      return request.auth.token.branchId;
+    }
+
+    // Branch managers and staff are scoped to their own branch; tenant admins see all.
+    function canAccessBranch(branchId) {
+      return isTenantAdmin() || userBranchId() == branchId;
+    }
+
+    // ---------- Super Admin: platform-wide ----------
+    match /{document=**} {
+      allow read, write: if isSuperAdmin();
+    }
+
+    // ---------- Subscription plan catalog (SA-03) ----------
+    // Public read (pricing page /trial-expired shows this to expired-trial
+    // users whose isActive:false already blocks their tenant-doc reads —
+    // this must not depend on isActiveUser(tenantId)). Write stays Super-Admin-only
+    // via the blanket rule above; this block only ever *adds* read access,
+    // never narrows it.
+    match /subscription_plans/{planId} {
+      allow read: if true;
+    }
+
+    // ---------- Platform settings (SA-05) ----------
+    // Public read (login/trial-expired/suspended/tenant-layout trial banner
+    // all need the support phone/WhatsApp/email before — or regardless of
+    // — the visitor being signed in; this must not depend on
+    // isActiveUser(tenantId), same reasoning as subscription_plans above). Write
+    // stays Super-Admin-only via the blanket rule above; this block only
+    // ever *adds* read access, never narrows it.
+    match /platform_settings/{docId} {
+      allow read: if true;
+    }
+
+    // ---------- Tenant root document ----------
+    match /tenants/{tenantId} {
+      allow read: if belongsToTenant(tenantId) && isActiveUser(tenantId);
+      // Only tenant_admin may update tenant settings/profile fields directly.
+      // subscriptionStatus / planFeatures / isActive are server-managed only
+      // (Cloud Functions use the Admin SDK, which bypasses these rules).
+      allow update: if belongsToTenant(tenantId) && isActiveUser(tenantId) && isTenantAdmin()
+                    && !request.resource.data.diff(resource.data).affectedKeys()
+                         .hasAny(['subscriptionStatus', 'planFeatures', 'isActive', 'isTrial', 'trialEndsAt', 'planId']);
+      allow create, delete: if false; // tenant lifecycle is Cloud-Function only
+    }
+
+    // ---------- Branches ----------
+    match /tenants/{tenantId}/branches/{branchId} {
+      allow read: if belongsToTenant(tenantId) && isActiveUser(tenantId);
+      // AUDIT-REPORT-5.md Issue #2 fix (৪ আগস্ট ২০২৬): create used to be
+      // allowed directly from the client (isTenantAdmin() only, no count
+      // check) — nothing anywhere enforced the blueprint's per-plan
+      // max-branches limit (অংশ ৪.৩: basic ১টি / standard ৩টি / premium
+      // সীমাহীন), so a Basic-tier tenant could create unlimited branches.
+      // Branch creation now goes exclusively through
+      // app/api/branches/create (Admin SDK, which checks
+      // lib/server/branch-helpers.ts's getBranchLimit() before writing) —
+      // same Admin-SDK-only pattern already used for the `users`
+      // collection below. Editing/toggling an *existing* branch (name,
+      // address, manager, isActive) still writes directly from the
+      // client — those can't increase the branch count, so no limit
+      // check is needed for them.
+      allow create: if false;
+      allow update: if belongsToTenant(tenantId) && isActiveUser(tenantId) && isTenantAdmin();
+      allow delete: if false; // soft delete only, via update
+    }
+
+    // ---------- Users (staff records under tenant) — Module T-07 ─────────
+    // Staff creation / role / branch / commission / activation changes are
+    // performed exclusively by onCreateStaffMember, onUpdateStaffMember, and
+    // onSetStaffActiveStatus Cloud Functions (Admin SDK, bypasses these
+    // rules). The one exception (added in T-08, extended সেশন ৫ ১৮ আগস্ট
+    // ২০২৬) is that a user may update their own `name` and `avatarUrl`
+    // fields directly — see the update rule below.
+    match /tenants/{tenantId}/users/{userId} {
+      allow read: if belongsToTenant(tenantId) && isActiveUser(tenantId)
+                  && (isTenantAdmin() || isBranchManager() || request.auth.uid == userId);
+      // Self-service: a user may update only their own `name`/`avatarUrl`
+      // (+ updatedAt) fields on their own doc (T-08 profile; `avatarUrl`
+      // added সেশন ৫ ১৮ আগস্ট ২০২৬ for the profile-picture-upload feature —
+      // lib/firebase/profile.ts's uploadProfileAvatar() mirrors the
+      // Cloudinary URL here for non-tenant_admin roles, exactly like
+      // updateDisplayName() already does for `name`). Every other write —
+      // role, branchId, commissionRate, isActive, deletedAt, email —
+      // remains Cloud-Function-only via onCreateStaffMember /
+      // onUpdateStaffMember / onSetStaffActiveStatus (Admin SDK, bypasses
+      // these rules).
+      allow update: if belongsToTenant(tenantId) && isActiveUser(tenantId)
+                    && request.auth.uid == userId
+                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'avatarUrl', 'updatedAt']);
+      allow create, delete: if false;
+    }
+
+    // ---------- Orders ----------
+    match /tenants/{tenantId}/orders/{orderId} {
+      allow read: if belongsToTenant(tenantId) && isActiveUser(tenantId)
+                  && canAccessBranch(resource.data.branchId);
+
+      allow create: if belongsToTenant(tenantId) && isActiveUser(tenantId)
+                    && request.resource.data.tenantId == tenantId
+                    && request.resource.data.branchId is string
+                    && canAccessBranch(request.resource.data.branchId)
+                    && request.resource.data.deletedAt == null;
+
+      allow update: if belongsToTenant(tenantId) && isActiveUser(tenantId)
+                    && canAccessBranch(resource.data.branchId)
+                    && (isTenantAdmin() || isBranchManager()
+                        // SECURITY FIX (audit item #3, ৩০ জুলাই ২০২৬):
+                        // "Staff দ্বারা order amount/items মুক্তভাবে edit
+                        // করা যাওয়া (commission-পরবর্তী integrity ঝুঁকি)" —
+                        // the previous rule only stopped staff from
+                        // changing branchId/takenByStaffId, leaving every
+                        // billing field (subtotal, discountAmount,
+                        // adjustment, totalAmount, advanceAmount) wide
+                        // open — a malicious commission_staff/
+                        // regular_staff member could rewrite an order's
+                        // totalAmount even *after* order_costings/{orderId}
+                        // exists and commission was already computed from
+                        // the original figures (T-12: প্রাপ্য কমিশন =
+                        // (মোট বিল − মোট কস্টিং) × হার). Staff's only two
+                        // legitimate order-document writes are
+                        // updateOrderStatus() (blueprint T-03: চলমান কাজের
+                        // তালিকা status আপডেট) and recordPayment()'s
+                        // additive dueAmount reduction (T-05: পেমেন্ট
+                        // সংগ্রহ) — so staff may now ONLY ever touch
+                        // {status, dueAmount, updatedAt}, and dueAmount may
+                        // only ever go down, never up (payments are
+                        // additive-only, never a refund/increase from this
+                        // path — blueprint 5.4: "পেমেন্ট সবসময় যোগ হবে,
+                        // replace নয়"). Every billing field, assignedStaffId
+                        // (reassignment is admin/branch_manager-only via
+                        // reassignStaff()), and deletedAt/deletedBy
+                        // (soft-delete is admin-only) are therefore
+                        // unconditionally frozen for staff, regardless of
+                        // whether costing/commission has been recorded yet.
+                        //
+                        // deliveredAt added to this allowlist (১২ আগস্ট ২০২৬,
+                        // "সরাসরি ডেলিভারড হিসেবে সেভ" ফিচার): updateOrderStatus()
+                        // now stamps deliveredAt in the SAME write whenever status
+                        // transitions to 'delivered', including staff's own
+                        // ordinary status-progression flow (blueprint T-03: "যেকোনো
+                        // স্টাফ সরাসরি স্ট্যাটাস পরিবর্তন করতে পারবেন"). Without this
+                        // addition every staff-initiated "mark as delivered" click
+                        // would have been rejected by this same hasOnly() check —
+                        // the exact same silent-failure class of bug as the
+                        // order-form branchId issue. No new write surface is opened:
+                        // deliveredAt still only ever gets set server-side by
+                        // updateOrderStatus()/createOrder(), never freely by a raw
+                        // client write, since it's always paired with the status
+                        // transition in the same document write.
+                        || (isStaff()
+                            && request.resource.data.diff(resource.data).affectedKeys()
+                                 .hasOnly(["status", "dueAmount", "updatedAt", "lastPaymentId", "deliveredAt"])
+                            && (
+                                 // Status-only update: dueAmount untouched,
+                                 // no payment linkage required.
+                                 //
+                                 // FIN-002 ফিক্স (১৬ আগস্ট ২০২৬, external
+                                 // audit): এই branch-এ আগে `lastPaymentId`
+                                 // একেবারেই constrain করা হতো না — যদিও
+                                 // এটা staff-এর hasOnly() allowlist-এ ছিল,
+                                 // শুধু dueAmount-কমা branch-ই সেটা validate
+                                 // করত। ফলে একটা pure status-update write
+                                 // (dueAmount অপরিবর্তিত রেখে) সাথে করে
+                                 // `lastPaymentId`-ও বদলে দিতে পারত, কোনো
+                                 // validation ছাড়াই — এতে অর্ডারের
+                                 // payment-linkage audit trail-টা ভুল/অন্য
+                                 // কোনো payment-এর দিকে নির্দেশ করে
+                                 // corrupt হয়ে যেতে পারত। এখন এই branch-এ
+                                 // lastPaymentId-ও অপরিবর্তিত থাকা
+                                 // বাধ্যতামূলক — `.get(key, null)` ব্যবহার
+                                 // করা হয়েছে যাতে যেসব পুরনো/নতুন অর্ডারে
+                                 // এখনো কোনো পেমেন্টই হয়নি (ফিল্ডটাই
+                                 // ডকুমেন্টে নেই) সেগুলোতেও rule error না
+                                 // ছুঁড়ে সঠিকভাবে কাজ করে।
+                                 (request.resource.data.dueAmount == resource.data.dueAmount
+                                  && request.resource.data.get("lastPaymentId", null) == resource.data.get("lastPaymentId", null))
+                                 ||
+                                 // AUDIT-REPORT-5.md Issue #1 fix (৪ আগস্ট
+                                 // ২০২৬): dueAmount may only decrease if
+                                 // this same write also carries a
+                                 // `lastPaymentId` pointing at a payment
+                                 // document written in this SAME
+                                 // transaction (getAfter() reads
+                                 // post-commit state, so it sees sibling
+                                 // writes made inside recordPayment()'s
+                                 // runTransaction — this is the officially
+                                 // documented Firestore rules mechanism for
+                                 // linking two documents written in one
+                                 // transaction/batch) whose orderId,
+                                 // collectedBy, and amount all line up
+                                 // exactly with the dueAmount decrease.
+                                 // Previously a staff-role raw-SDK write
+                                 // could set dueAmount to any lower value
+                                 // (even 0) with zero payment record — a
+                                 // silent debt write-off with no ledger
+                                 // trail. NOTE: this getAfter() rule has
+                                 // been reviewed statically but NOT yet
+                                 // run against the Firebase emulator in
+                                 // this sandbox (network-restricted, see
+                                 // AUDIT-REPORT-5.md §0) — test both a
+                                 // valid recordPayment() and a raw-SDK
+                                 // dueAmount-only write before relying on
+                                 // this in production.
+                                 (request.resource.data.dueAmount < resource.data.dueAmount
+                                  && request.resource.data.lastPaymentId is string
+                                  && getAfter(/databases/$(database)/documents/tenants/$(tenantId)/payments/$(request.resource.data.lastPaymentId)).data.orderId == orderId
+                                  && getAfter(/databases/$(database)/documents/tenants/$(tenantId)/payments/$(request.resource.data.lastPaymentId)).data.collectedBy == request.auth.uid
+                                  && getAfter(/databases/$(database)/documents/tenants/$(tenantId)/payments/$(request.resource.data.lastPaymentId)).data.amount == resource.data.dueAmount - request.resource.data.dueAmount)
+                               ))
+                        // Costing entry (T-11, order-costing.ts) flips this
+                        // order's own `hasCosting` flag to true in the same
+                        // transaction as writing order_costings/{orderId} —
+                        // mirrors that collection's own authorization
+                        // condition exactly (role + takenByStaffId match),
+                        // and only ever allows setting it to true, never
+                        // clearing it back to false/undefined.
+                        || (role() == 'commission_staff'
+                            && resource.data.takenByStaffId == request.auth.uid
+                            && request.resource.data.diff(resource.data).affectedKeys()
+                                 .hasOnly(["hasCosting", "updatedAt"])
+                            && request.resource.data.hasCosting == true));
+
+      allow delete: if false; // soft delete only, via update (deletedAt)
+    }
+
+    // ---------- Payments ----------
+    match /tenants/{tenantId}/payments/{paymentId} {
+      allow read: if belongsToTenant(tenantId) && isActiveUser(tenantId)
+                  && canAccessBranch(resource.data.branchId);
+
+      // SECURITY FIX (AUDIT-REPORT-3.md Issue #4, ২ আগস্ট ২০২৬): amount was
+      // only checked to be > 0 — nothing tied it to the referenced order's
+      // actual dueAmount, so a raw-SDK write could record a payment far
+      // larger than what was owed while the paired order-update write
+      // (governed independently by the orders match block above) reduced
+      // dueAmount by an unrelated amount, or pushed it negative. Reading
+      // the order here (same get() cross-document pattern already used at
+      // line 53/447 above) lets this rule enforce
+      // amount <= order.dueAmount directly, closing that gap without
+      // needing a server-side transaction for this specific check.
+      allow create: if belongsToTenant(tenantId) && isActiveUser(tenantId)
+                    && request.resource.data.tenantId == tenantId
+                    && request.resource.data.branchId is string
+                    && canAccessBranch(request.resource.data.branchId)
+                    && request.resource.data.amount > 0
+                    && request.resource.data.orderId is string
+                    && request.resource.data.deletedAt == null
+                    && request.resource.data.amount
+                         <= get(/databases/$(database)/documents/tenants/$(tenantId)/orders/$(request.resource.data.orderId)).data.dueAmount;
+
+      // Payments are append-only ledger entries — normally never edited or
+      // deleted by clients (blueprint section 5.4: "পেমেন্ট সবসময় যোগ হবে,
+      // replace নয়")। ব্যতিক্রম (ইউজার-ফিডব্যাক সেশন ২, ১৮ আগস্ট ২০২৬):
+      // softDeleteOrder() একটা অর্ডার সফট-ডিলিট করলে একই client
+      // transaction-এ সংশ্লিষ্ট payment ডকুমেন্টেও deletedAt/deletedBy
+      // cascade-set করে (হার্ড-ডিলিট নয়, শুধু ফ্ল্যাগ) — orders match
+      // ব্লকের deletedAt-permission-এর (তেন্যান্ট_admin/branch_manager-ই
+      // অর্ডার সফট-ডিলিট করতে পারেন) সমান্তরাল rule এখানে বসানো হলো।
+      // hasOnly() নিশ্চিত করে শুধু এই দুটো ফিল্ডই বদলাতে পারে (amount/
+      // orderId/branchId ইত্যাদি আজীবন immutable থাকে), আর
+      // resource.data.deletedAt == null precondition নিশ্চিত করে এটা
+      // এক-মুখী (একবার ডিলিট হলে আবার undelete বা re-trigger করা যাবে না)।
+      allow update: if belongsToTenant(tenantId) && isActiveUser(tenantId)
+                    && canAccessBranch(resource.data.branchId)
+                    && (isTenantAdmin() || isBranchManager())
+                    && resource.data.deletedAt == null
+                    && request.resource.data.deletedAt != null
+                    && request.resource.data.diff(resource.data).affectedKeys()
+                         .hasOnly(["deletedAt", "deletedBy"]);
+
+      allow delete: if false;
+    }
+
+    // ---------- Order items (subcollection, per blueprint section 12.1) ----------
+    match /tenants/{tenantId}/orders/{orderId}/order_items/{itemId} {
+      allow read: if belongsToTenant(tenantId) && isActiveUser(tenantId);
+
+      // Order items are only ever written together with their parent order,
+      // inside the same client transaction in createOrder(). No standalone
+      // update/delete from clients — items are immutable once the order exists.
+      allow create: if belongsToTenant(tenantId) && isActiveUser(tenantId)
+                    && request.resource.data.orderId == orderId;
+      allow update, delete: if false;
+    }
+
+    // ---------- Customers (lightweight T-04 foundation) ----------
+    match /tenants/{tenantId}/customers/{customerId} {
+      allow read: if belongsToTenant(tenantId) && isActiveUser(tenantId);
+      allow create: if belongsToTenant(tenantId) && isActiveUser(tenantId)
+                    && request.resource.data.tenantId == tenantId
+                    && request.resource.data.deletedAt == null;
+
+      // DATA-001 ফিক্স (১৬ আগস্ট ২০২৬, external audit): আগে
+      // "isTenantAdmin() || isBranchManager() || isStaff()" ছিল — অর্থাৎ
+      // যেকোনো staff role (এমনকি সবচেয়ে কম-অনুমতির regular_staff) কোনো
+      // field-restriction ছাড়াই যেকোনো কাস্টমারের যেকোনো ডেটা বদলাতে
+      // পারতেন, এবং deletedAt-ও একইভাবে সেট করে soft-delete করতে পারতেন —
+      // অথচ UI-তে এডিট/ডিলিট দুটোই শুধু canManage
+      // (tenant_admin/branch_manager) role-এর জন্য বাটন হিসেবে দেখানো হয়
+      // (app/(tenant)/dashboard/customers/page.tsx, customer-detail page)।
+      // এতদিন এই বিধিনিষেধ শুধু UI-স্তরে ছিল, rules-স্তরে ছিল না — একটা
+      // raw SDK কল দিয়ে যেকোনো staff একাউন্ট UI বাইপাস করে যেকোনো
+      // কাস্টমারের তথ্য বদলাতে/মুছে ফেলতে পারতেন। এখন rules-ও UI-র সাথে
+      // সঙ্গতিপূর্ণ: শুধু tenant_admin/branch_manager, tenantId immutable,
+      // এবং প্রতিটা write হয় lib/firebase/customers.ts-এর updateCustomer()
+      // (প্রোফাইল ফিল্ড) নয়তো softDeleteCustomer()-এর (soft-delete ফিল্ড)
+      // এই দুই আকৃতির একটার সাথে হুবহু মিলতে হবে — অন্য কোনো ফিল্ড-সমন্বয়ে
+      // লেখা যাবে না।
+      allow update: if belongsToTenant(tenantId) && isActiveUser(tenantId)
+                    && (isTenantAdmin() || isBranchManager())
+                    && request.resource.data.tenantId == resource.data.tenantId
+                    && (
+                         // lib/firebase/customers.ts → updateCustomer(): প্রোফাইল এডিট,
+                         // deletedAt অপরিবর্তিত থাকতেই হবে।
+                         (request.resource.data.deletedAt == resource.data.deletedAt
+                          && request.resource.data.diff(resource.data).affectedKeys()
+                               .hasOnly(["name", "phone", "email", "address", "companyName", "updatedAt"]))
+                         ||
+                         // lib/firebase/customers.ts → softDeleteCustomer(): শুধু
+                         // null → non-null এই এক-দিকের ট্রানজিশন, আর কিছু টাচ করা যাবে না।
+                         (resource.data.deletedAt == null
+                          && request.resource.data.deletedAt != null
+                          && request.resource.data.diff(resource.data).affectedKeys()
+                               .hasOnly(["deletedAt", "deletedBy", "updatedAt"]))
+                         ||
+                         // ১৭ আগস্ট ২০২৬ যোগ হলো — lib/firebase/customer-supplier-link.ts:
+                         // কাস্টমার+সাপ্লায়ার দ্বৈত-ভূমিকা লিংক/আনলিংক। deletedAt
+                         // অপরিবর্তিত থাকতেই হবে, শুধু এই দুই ফিল্ডই বদলাবে।
+                         (request.resource.data.deletedAt == resource.data.deletedAt
+                          && request.resource.data.diff(resource.data).affectedKeys()
+                               .hasOnly(["linkedSupplierId", "linkedSupplierName", "updatedAt"]))
+                       );
+      allow delete: if false; // soft delete only, via update
+    }
+
+    // ---------- Item master (lightweight T-06 foundation) ----------
+    match /tenants/{tenantId}/items/{itemId} {
+      allow read: if belongsToTenant(tenantId) && isActiveUser(tenantId);
+      allow create: if belongsToTenant(tenantId) && isActiveUser(tenantId)
+                    && request.resource.data.tenantId == tenantId;
+
+      // DATA-002 ফিক্স (১৬ আগস্ট ২০২৬, external audit): tenant_admin/
+      // branch_manager-এর আপডেট আগে কোনো field-restriction বা tenantId
+      // immutability ছাড়াই সম্পূর্ণ open ছিল — একটা raw SDK কল দিয়ে
+      // tenantId ফিল্ড অন্য কোনো টেন্যান্ট-আইডিতে বদলে ডেটা-করাপশন তৈরি
+      // করা সম্ভব ছিল (path-based scoping-এর কারণে ডকুমেন্টটা আসলে অন্য
+      // টেন্যান্টে সরে যেত না, কিন্তু ফিল্ড আর পাথ-এর মধ্যে অসামঞ্জস্য
+      // তৈরি হতো)। এখন lib/firebase/items.ts-এর createItem()/updateItem()
+      // ঠিক যে ফিল্ডগুলো লেখে (name, defaultUnitPrice, attributeGroups,
+      // updatedAt) এবং softDeleteItem()-এর soft-delete ফিল্ডগুলো — এই
+      // দুই আকৃতির একটার সাথে হুবহু মিলতে হবে, tenantId সবসময় অপরিবর্তিত।
+      allow update: if belongsToTenant(tenantId) && isActiveUser(tenantId)
+                    && request.resource.data.tenantId == resource.data.tenantId
+                    && (
+                      (
+                        (isTenantAdmin() || isBranchManager())
+                        && (
+                             // lib/firebase/items.ts → updateItem(): সাধারণ এডিট,
+                             // deletedAt অপরিবর্তিত থাকতেই হবে।
+                             (request.resource.data.deletedAt == resource.data.deletedAt
+                              && request.resource.data.diff(resource.data).affectedKeys()
+                                   .hasOnly(["name", "defaultUnitPrice", "attributeGroups", "updatedAt"]))
+                             ||
+                             // lib/firebase/items.ts → softDeleteItem(): শুধু
+                             // null → non-null এই এক-দিকের ট্রানজিশন।
+                             (resource.data.deletedAt == null
+                              && request.resource.data.deletedAt != null
+                              && request.resource.data.diff(resource.data).affectedKeys()
+                                   .hasOnly(["deletedAt", "deletedBy", "updatedAt"]))
+                           )
+                      )
+                      // ১২ আগস্ট ২০২৬, Item Variants ধাপ ১ — অর্ডার-ফর্মে
+                      // commission_staff/regular_staff নতুন সাইজ/কালার অপশন
+                      // টাইপ করলে lib/firebase/items.ts-এর addAttributeOption()
+                      // item master-এ স্থায়ীভাবে সেভ করে (অপশন B)। staff-দের
+                      // item-master ব্যবস্থাপনার সাধারণ অনুমতি নেই (T-06),
+                      // তাই এই ব্যতিক্রম সংকীর্ণভাবে শুধু attributeGroups
+                      // ফিল্ডেই সীমাবদ্ধ — নাম/দাম/deletedAt staff স্পর্শ
+                      // করতে পারবেন না।
+                      || (isStaff()
+                          && request.resource.data.diff(resource.data).affectedKeys()
+                               .hasOnly(["attributeGroups", "updatedAt"]))
+                    );
+      allow delete: if false; // soft delete only, via update
+    }
+
+    // ---------- Order numbering counters (Cloud Function only) ----------
+    match /tenants/{tenantId}/counters/{counterId} {
+      allow read, write: if false; // written only by generateOrderNumber via Admin SDK
+    }
+
+
+    // ---------- Audit logs ----------
+    match /tenants/{tenantId}/audit_logs/{logId} {
+      // Tenant Admin reads the full log; any active user may read their own
+      // entries only (T-08 personal login history — device & IP).
+      allow read: if belongsToTenant(tenantId) && isActiveUser(tenantId)
+                  && (isTenantAdmin() || resource.data.userId == request.auth.uid);
+      // SECURITY FIX (AUDIT-REPORT-3.md Issue #6, ২ আগস্ট ২০২৬): nothing
+      // previously tied the written userId to the actual caller — any
+      // active user could write an entry attributing an action to someone
+      // else. Both write paths (lib/firebase/audit.ts's logAuthEvent and
+      // logAction) already always set userId from the caller's own
+      // auth.currentUser.uid, never from a parameter, so this is a
+      // no-op for legitimate writes and only blocks spoofed ones.
+      allow create: if belongsToTenant(tenantId) && isActiveUser(tenantId)
+                    && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if false;
+    }
+
+    // ---------- SMS/Email delivery retry queue — Phase 3 (blueprint ১৩.৩) ----------
+    // Written exclusively by app/api/notifications/send-sms|send-email
+    // (Firebase Admin SDK, bypasses these rules entirely) and by
+    // netlify/functions/retry-notification-deliveries.mts (also Admin SDK).
+    // No client ever writes here directly. Read access is limited to
+    // Tenant Admin — there's no dedicated UI for this collection yet (a
+    // future delivery-history page would read from here), but blocking
+    // read entirely would make even ad-hoc debugging via the Firestore
+    // console impossible for a tenant's own admin.
+    match /tenants/{tenantId}/notification_deliveries/{deliveryId} {
+      allow read: if belongsToTenant(tenantId) && isActiveUser(tenantId) && isTenantAdmin();
+      allow write: if false;
+    }
+
+    // ---------- Stock items — Module T-15 (স্ট্যান্ডার্ড+) ----------
+    // Only tenant_admin (all branches) and branch_manager (own branch) may
+    // manage stock — matches sidebar.tsx role gate (roles: [tenant_admin,
+    // branch_manager]). commission_staff / regular_staff get read-only
+    // access via canAccessBranch, in case a future module needs to look up
+    // stock availability from their own branch.
+    match /tenants/{tenantId}/stock_items/{stockId} {
+      allow read: if belongsToTenant(tenantId) && isActiveUser(tenantId)
+                  && canAccessBranch(resource.data.branchId);
+
+      allow create: if belongsToTenant(tenantId) && isActiveUser(tenantId)
+                    && (isTenantAdmin() || isBranchManager())
+                    && request.resource.data.tenantId == tenantId
+                    && request.resource.data.branchId is string
+                    && canAccessBranch(request.resource.data.branchId)
+                    && request.resource.data.deletedAt == null;
+
+      // Covers both the item-profile edit path (name/category/unit/
+      // minimumLevel) and the stock-transaction path (currentStock), plus
+      // soft delete (deletedAt) — all go through the same update rule, same
+      // as orders. branchId/tenantId may never change on update.
+      allow update: if belongsToTenant(tenantId) && isActiveUser(tenantId)
+                    && (isTenantAdmin() || isBranchManager())
+                    && canAccessBranch(resource.data.branchId)
+                    && request.resource.data.branchId == resource.data.branchId
+                    && request.resource.data.tenantId == tenantId;
+
+      allow delete: if false; // soft delete only, via update
+    }
+
+    // ---------- Stock transactions (ledger, written atomically with the ----
+    // ---------- parent stock_items doc inside a client Firestore transaction) ---
+    match /tenants/{tenantId}/stock_transactions/{txId} {
+      allow read: if belongsToTenant(tenantId) && isActiveUser(tenantId)
+                  && canAccessBranch(resource.data.branchId);
+
+      allow create: if belongsToTenant(tenantId) && isActiveUser(tenantId)
+                    && (isTenantAdmin() || isBranchManager())
+                    && request.resource.data.tenantId == tenantId
+                    && request.resource.data.branchId is string
+                    && canAccessBranch(request.resource.data.branchId)
+                    && request.resource.data.performedBy == request.auth.uid;
+
+      // Immutable ledger entries — never edited or deleted by clients,
+      // same rule as payments (blueprint section 5.4).
+      allow update, delete: if false;
+    }
+
+    // ---------- Suppliers — Module T-16 (স্ট্যান্ডার্ড+) ----------
+    // Same access shape as stock_items: tenant_admin (all branches) and
+    // branch_manager (own branch) manage; staff get branch-scoped read-only.
+    match /tenants/{tenantId}/suppliers/{supplierId} {
+      allow read: if belongsToTenant(tenantId) && isActiveUser(tenantId)
+                  && canAccessBranch(resource.data.branchId);
+
+      allow create: if belongsToTenant(tenantId) && isActiveUser(tenantId)
+                    && (isTenantAdmin() || isBranchManager())
+                    && request.resource.data.tenantId == tenantId
+                    && request.resource.data.branchId is string
+                    && canAccessBranch(request.resource.data.branchId)
+                    && request.resource.data.deletedAt == null;
+
+      allow update: if belongsToTenant(tenantId) && isActiveUser(tenantId)
+                    && (isTenantAdmin() || isBranchManager())
+                    && canAccessBranch(resource.data.branchId)
+                    && request.resource.data.branchId == resource.data.branchId
+                    && request.resource.data.tenantId == tenantId;
+
+      allow delete: if false; // soft delete only, via update
+    }
+
+    // ---------- Supplier ledger (Purchase / Payment entries) — note: the ---
+    // ---------- actual collection name is supplier_transactions, not the --
+    // ---------- blueprint's supplier_payments, since it also carries -----
+    // ---------- purchase entries, not just payments. ----------------------
+    match /tenants/{tenantId}/supplier_transactions/{txId} {
+      allow read: if belongsToTenant(tenantId) && isActiveUser(tenantId)
+                  && canAccessBranch(resource.data.branchId);
+
+      allow create: if belongsToTenant(tenantId) && isActiveUser(tenantId)
+                    && (isTenantAdmin() || isBranchManager())
+                    && request.resource.data.tenantId == tenantId
+                    && request.resource.data.branchId is string
+                    && canAccessBranch(request.resource.data.branchId)
+                    && request.resource.data.performedBy == request.auth.uid;
+
+      allow update, delete: if false;
+    }
+
+    // ---------- Cost calculator templates — Module T-10 (স্ট্যান্ডার্ড+) ----
+    // Category *names* only (no quantity/price — those stay blank on load).
+    // Branch-scoped, same access shape as stock_items/suppliers: tenant_admin
+    // (all branches) and branch_manager (own branch) manage; matches
+    // sidebar.tsx role gate (roles: [tenant_admin, branch_manager]).
+    match /tenants/{tenantId}/cost_templates/{templateId} {
+      allow read: if belongsToTenant(tenantId) && isActiveUser(tenantId)
+                  && canAccessBranch(resource.data.branchId);
+
+      allow create: if belongsToTenant(tenantId) && isActiveUser(tenantId)
+                    && (isTenantAdmin() || isBranchManager())
+                    && request.resource.data.tenantId == tenantId
+                    && request.resource.data.branchId is string
+                    && canAccessBranch(request.resource.data.branchId)
+                    && request.resource.data.createdBy == request.auth.uid
+                    && request.resource.data.deletedAt == null;
+
+      // Only the soft-delete path is used from the client today (no rename
+      // UI yet) — still scoped to branch + role for when editing is added.
+      allow update: if belongsToTenant(tenantId) && isActiveUser(tenantId)
+                    && (isTenantAdmin() || isBranchManager())
+                    && canAccessBranch(resource.data.branchId)
+                    && request.resource.data.branchId == resource.data.branchId
+                    && request.resource.data.tenantId == tenantId;
+
+      allow delete: if false; // soft delete only, via update
+    }
+
+    // ---------- Cost calculator saved calculations — Module T-10 ----------
+    // Full snapshots kept for reference (future "কপি" targets once T-11/T-14
+    // exist). Append-only from the client's perspective, aside from soft
+    // delete — totals are always server-recomputed by saveCostCalculation()
+    // before being written, never trusted from raw client input beyond that.
+    match /tenants/{tenantId}/cost_calculations/{calcId} {
+      allow read: if belongsToTenant(tenantId) && isActiveUser(tenantId)
+                  && canAccessBranch(resource.data.branchId);
+
+      allow create: if belongsToTenant(tenantId) && isActiveUser(tenantId)
+                    && (isTenantAdmin() || isBranchManager())
+                    && request.resource.data.tenantId == tenantId
+                    && request.resource.data.branchId is string
+                    && canAccessBranch(request.resource.data.branchId)
+                    && request.resource.data.createdBy == request.auth.uid
+                    && request.resource.data.deletedAt == null;
+
+      // Soft delete only — no other field may change after creation.
+      allow update: if belongsToTenant(tenantId) && isActiveUser(tenantId)
+                    && (isTenantAdmin() || isBranchManager())
+                    && canAccessBranch(resource.data.branchId)
+                    && request.resource.data.diff(resource.data).affectedKeys()
+                         .hasOnly(['deletedAt', 'deletedBy', 'updatedAt']);
+
+      allow delete: if false; // soft delete only, via update
+    }
+
+    // ---------- Order costings — Module T-11 (স্ট্যান্ডার্ড+) --------------
+    // doc ID == orderId (1:1 with its order). commission_staff may only
+    // enter/edit costing for orders they themselves took (blueprint role
+    // table: COMMISSION_STAFF → "অর্ডারে কস্টিং এন্ট্রি"); tenant_admin and
+    // branch_manager may do so for any order in their scope.
+    match /tenants/{tenantId}/order_costings/{orderId} {
+      allow read: if belongsToTenant(tenantId) && isActiveUser(tenantId)
+                  && canAccessBranch(resource.data.branchId);
+
+      allow create, update: if belongsToTenant(tenantId) && isActiveUser(tenantId)
+                    && request.resource.data.tenantId == tenantId
+                    && request.resource.data.orderId == orderId
+                    && request.resource.data.branchId is string
+                    && canAccessBranch(request.resource.data.branchId)
+                    && (isTenantAdmin() || isBranchManager()
+                        || (role() == 'commission_staff'
+                            && get(/databases/$(database)/documents/tenants/$(tenantId)/orders/$(orderId)).data.takenByStaffId
+                               == request.auth.uid));
+
+      allow delete: if false; // corrections are done via update; no delete flow
+    }
+
+    // ---------- Quotations — Module T-14 (স্ট্যান্ডার্ড+) ------------------
+    // orders (T-02)-এর মতোই branch-scoped। quotationNumber ক্লায়েন্ট থেকে
+    // "OFFLINE-{timestamp}" হিসেবে লেখা হয় এবং generateQuotationNumber
+    // Cloud Function (Admin SDK, এই rules বাইপাস করে) সেটি ক্রমিক নম্বরে
+    // প্রতিস্থাপন করে। status পরিবর্তন ও soft delete উভয়ই update-এর মাধ্যমে।
+    match /tenants/{tenantId}/quotations/{quotationId} {
+      allow read: if belongsToTenant(tenantId) && isActiveUser(tenantId)
+                  && canAccessBranch(resource.data.branchId);
+
+      allow create: if belongsToTenant(tenantId) && isActiveUser(tenantId)
+                    && (isTenantAdmin() || isBranchManager())
+                    && request.resource.data.tenantId == tenantId
+                    && request.resource.data.branchId is string
+                    && canAccessBranch(request.resource.data.branchId)
+                    && request.resource.data.deletedAt == null;
+
+      allow update: if belongsToTenant(tenantId) && isActiveUser(tenantId)
+                    && (isTenantAdmin() || isBranchManager())
+                    && canAccessBranch(resource.data.branchId)
+                    // branchId/tenantId/quotationNumber may never change via a client update —
+                    // quotationNumber is generateQuotationNumber's job exclusively.
+                    && request.resource.data.branchId == resource.data.branchId
+                    && request.resource.data.tenantId == resource.data.tenantId
+                    && request.resource.data.quotationNumber == resource.data.quotationNumber;
+
+      allow delete: if false; // soft delete only, via update (deletedAt)
+    }
+
+    // ---------- Quotation items (subcollection, mirrors order_items) ------
+    match /tenants/{tenantId}/quotations/{quotationId}/quotation_items/{itemId} {
+      allow read: if belongsToTenant(tenantId) && isActiveUser(tenantId);
+
+      // Written only together with the parent quotation, inside the same
+      // client transaction in createQuotation(). Immutable afterwards.
+      allow create: if belongsToTenant(tenantId) && isActiveUser(tenantId)
+                    && (isTenantAdmin() || isBranchManager())
+                    && request.resource.data.quotationId == quotationId;
+      allow update, delete: if false;
+    }
+
+
+    // স্টাফ নিজে 'pending' অবস্থায় নিজের staffId দিয়ে একটি request তৈরি করতে
+    // পারেন; শুধু Tenant Admin / Branch Manager (নিজ শাখার মধ্যে) সেটি
+    // approve/reject করতে পারেন — এবং শুধুমাত্র তখনই যখন এটি এখনো 'pending'।
+    // Expense অটো-এন্ট্রি (blueprint T-12) T-13 তৈরি না হওয়া পর্যন্ত স্থগিত —
+    // এই সেশনে শুধু staff_withdrawals ডকুমেন্ট নিজে লেখা হয়।
+    match /tenants/{tenantId}/staff_withdrawals/{withdrawalId} {
+      allow read: if belongsToTenant(tenantId) && isActiveUser(tenantId)
+                  && (canAccessBranch(resource.data.branchId) || resource.data.staffId == request.auth.uid);
+
+      allow create: if belongsToTenant(tenantId) && isActiveUser(tenantId)
+                    && role() == 'commission_staff'
+                    && request.resource.data.tenantId == tenantId
+                    && request.resource.data.staffId == request.auth.uid
+                    && request.resource.data.requestedBy == request.auth.uid
+                    && canAccessBranch(request.resource.data.branchId)
+                    && request.resource.data.status == 'pending'
+                    && request.resource.data.amount == request.resource.data.requestedAmount
+                    && request.resource.data.amount > 0
+                    && request.resource.data.editedByAdmin == false
+                    && request.resource.data.processedBy == null;
+
+      allow update: if belongsToTenant(tenantId) && isActiveUser(tenantId)
+                    && (isTenantAdmin() || isBranchManager())
+                    && canAccessBranch(resource.data.branchId)
+                    && resource.data.status == 'pending'
+                    && request.resource.data.status in ['approved', 'rejected']
+                    && request.resource.data.processedBy == request.auth.uid
+                    && request.resource.data.diff(resource.data).affectedKeys()
+                       .hasOnly(['status', 'amount', 'editedByAdmin', 'adminNote',
+                                 'processedBy', 'processedByName', 'processedAt', 'updatedAt']);
+
+      allow delete: if false; // অডিট ট্রেইল সুরক্ষার জন্য কোনো delete নেই
+    }
+
+    // ---------- Expense Categories — Module T-13 (স্ট্যান্ডার্ড+) ----------
+    // Tenant-wide (branchId নেই) — TENANT_ADMIN ও BRANCH_MANAGER উভয়েই
+    // ক্যাটাগরি তৈরি করতে পারেন। 'স্টাফ পেমেন্ট' (isSystem: true) ক্যাটাগরি
+    // তৈরি করা যায় (ensureStaffPaymentCategory lazily সেট করে) কিন্তু একবার
+    // isSystem হয়ে গেলে সম্পাদনা/মুছে ফেলা যায় না — blueprint T-13:
+    // "'স্টাফ পেমেন্ট' সিস্টেম-নিয়ন্ত্রিত"।
+    match /tenants/{tenantId}/expense_categories/{categoryId} {
+      allow read: if belongsToTenant(tenantId) && isActiveUser(tenantId);
+
+      allow create: if belongsToTenant(tenantId) && isActiveUser(tenantId)
+                    && (isTenantAdmin() || isBranchManager())
+                    && request.resource.data.tenantId == tenantId;
+
+      allow update: if belongsToTenant(tenantId) && isActiveUser(tenantId)
+                    && (isTenantAdmin() || isBranchManager())
+                    && resource.data.isSystem != true
+                    && request.resource.data.isSystem == resource.data.isSystem;
+
+      allow delete: if false; // soft delete only, via update
+    }
+
+    // ---------- Expenses — Module T-13 (স্ট্যান্ডার্ড+) ----------
+    // একই অ্যাক্সেস শেপ stock_items/suppliers-এর মতো: TENANT_ADMIN সব শাখা,
+    // BRANCH_MANAGER শুধু নিজের শাখা লেখেন/পড়েন — COMMISSION_STAFF/
+    // REGULAR_STAFF-এর কোনো অ্যাক্সেস নেই (sidebar.tsx-এ roles গেটেড)।
+    //
+    // `sourceWithdrawalId` non-null থাকা এন্ট্রি (T-12 কমিশন উত্তোলন থেকে
+    // স্বয়ংক্রিয়ভাবে তৈরি) client থেকে কখনো update/delete করা যাবে না — উৎস
+    // সত্য staff_withdrawals ডকুমেন্টেই থাকে, ফলে এখানে ডেটা ড্রিফট এড়ানো হয়।
+    match /tenants/{tenantId}/expenses/{expenseId} {
+      allow read: if belongsToTenant(tenantId) && isActiveUser(tenantId)
+                  && (isTenantAdmin() || isBranchManager())
+                  && canAccessBranch(resource.data.branchId);
+
+      allow create: if belongsToTenant(tenantId) && isActiveUser(tenantId)
+                    && (isTenantAdmin() || isBranchManager())
+                    && request.resource.data.tenantId == tenantId
+                    && request.resource.data.branchId is string
+                    && canAccessBranch(request.resource.data.branchId)
+                    && request.resource.data.amount > 0
+                    && request.resource.data.createdBy == request.auth.uid
+                    && request.resource.data.deletedAt == null;
+
+      allow update: if belongsToTenant(tenantId) && isActiveUser(tenantId)
+                    && (isTenantAdmin() || isBranchManager())
+                    && canAccessBranch(resource.data.branchId)
+                    && resource.data.sourceWithdrawalId == null
+                    && request.resource.data.branchId == resource.data.branchId
+                    && request.resource.data.tenantId == tenantId
+                    && request.resource.data.sourceWithdrawalId == null;
+
+      allow delete: if false; // soft delete only, via update
+    }
+
+
+
+    // ---------- Outsource Tracking — T-17 (প্রিমিয়াম), audit #৭ ----------
+    // sidebar.tsx-এ roles: ["tenant_admin"] শুধু — expenses-এর মতো
+    // branch_manager নয় (blueprint T-17 কোনো ভূমিকা উল্লেখ করেনি, কিন্তু
+    // Free Edition sidebar দিয়ে এই সেশনে TENANT_ADMIN-only হিসেবে স্কোপ করা
+    // হয়েছে)।
+    match /tenants/{tenantId}/outsource_records/{recordId} {
+      allow read: if belongsToTenant(tenantId) && isActiveUser(tenantId)
+                  && isTenantAdmin()
+                  && canAccessBranch(resource.data.branchId);
+
+      allow create: if belongsToTenant(tenantId) && isActiveUser(tenantId)
+                    && isTenantAdmin()
+                    && request.resource.data.tenantId == tenantId
+                    && request.resource.data.branchId is string
+                    && canAccessBranch(request.resource.data.branchId)
+                    && request.resource.data.cost >= 0
+                    && request.resource.data.createdBy == request.auth.uid
+                    && request.resource.data.deletedAt == null;
+
+      allow update: if belongsToTenant(tenantId) && isActiveUser(tenantId)
+                    && isTenantAdmin()
+                    && canAccessBranch(resource.data.branchId)
+                    && request.resource.data.tenantId == tenantId;
+
+      allow delete: if false; // soft delete only, via update
+    }
+
+    // ---------- Zakat — যাকাত মডিউল (ZK-01/ZK-02, সব প্যাকেজে) ----------
+    // শুধু TENANT_ADMIN — ব্যক্তিগত ব্যবহার, BRANCH_MANAGER/স্টাফদের কোনো
+    // অ্যাক্সেস নেই (sidebar.tsx-এ roles: ["tenant_admin"])। কোনো branchId
+    // স্কোপিং নেই — এটি ব্যবসার শাখা-কাঠামোর বাইরের ব্যক্তিগত হিসাব।
+    match /tenants/{tenantId}/zakat_years/{yearId} {
+      allow read: if belongsToTenant(tenantId) && isActiveUser(tenantId) && isTenantAdmin();
+
+      allow create: if belongsToTenant(tenantId) && isActiveUser(tenantId) && isTenantAdmin()
+                    && request.resource.data.tenantId == tenantId
+                    && request.resource.data.status == "active";
+
+      allow update: if belongsToTenant(tenantId) && isActiveUser(tenantId) && isTenantAdmin()
+                    && request.resource.data.tenantId == tenantId
+                    && request.resource.data.hijriYear == resource.data.hijriYear;
+
+      allow delete: if false;
+    }
+
+    match /tenants/{tenantId}/zakat_payments/{paymentId} {
+      allow read: if belongsToTenant(tenantId) && isActiveUser(tenantId) && isTenantAdmin();
+
+      allow create: if belongsToTenant(tenantId) && isActiveUser(tenantId) && isTenantAdmin()
+                    && request.resource.data.tenantId == tenantId
+                    && request.resource.data.amount > 0
+                    && request.resource.data.createdBy == request.auth.uid;
+
+      allow update, delete: if false; // append-only বিতরণ লেজার, T-05 payments-এর মতো
+    }
+
+
+
+    // ---------- Notifications — In-App নোটিফিকেশন (blueprint ১৪.১০) ----------
+    // শুধু Cloud Functions (Admin SDK, functions/src/notificationFunctions.ts)
+    // থেকে তৈরি হয় — ক্লায়েন্টের create/delete permission নেই। ক্লায়েন্ট শুধু
+    // readBy ফিল্ড আপডেট করতে পারে (mark as read)। লক্ষ্য দর্শক শুধু
+    // TENANT_ADMIN (সব শাখা) ও BRANCH_MANAGER (নিজের শাখা) — sidebar.tsx-এর
+    // অন্য admin-oriented আইটেমগুলোর কনভেনশন অনুসরণ করে, স্টাফ-facing নয়।
+    match /tenants/{tenantId}/notifications/{notificationId} {
+      allow read: if belongsToTenant(tenantId) && isActiveUser(tenantId)
+                  && (isTenantAdmin() || (isBranchManager() && canAccessBranch(resource.data.branchId)));
+
+      allow update: if belongsToTenant(tenantId) && isActiveUser(tenantId)
+                  && (isTenantAdmin() || (isBranchManager() && canAccessBranch(resource.data.branchId)))
+                  && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["readBy"]);
+
+      allow create, delete: if false;
+    }
+
+
+
+    // ---------- Fallback for any other tenant-scoped collection ----------
+    // Explicitly deny by default; each collection must add its own match block
+    // before it is used (per blueprint: "Firebase Security Rules প্রথম দিন থেকে লিখুন").
+  }
+}

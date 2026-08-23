@@ -1,0 +1,661 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AL-IHSAN PrintERP — পরিচিতি</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700&family=Noto+Sans+Bengali:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --navy:#0F2557;
+    --brand:#1E40AF;
+    --brand-light:#3B5BDB;
+    --sky:#0EA5E9;
+    --amber:#B8860B;
+    --amber-bright:#D4A017;
+    --paper:#FAF8F3;
+    --card:#FFFFFF;
+    --ink:#1A2238;
+    --ink-soft:#5B6478;
+    --line:#E4DFD3;
+    --green:#0F7B4E;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  html{background:#DDD8CA;}
+  body{
+    font-family:'Noto Sans Bengali','Hind Siliguri',sans-serif;
+    color:var(--ink);
+    line-height:1.55;
+    /* ফিক্স: dark ব্যাকগ্রাউন্ড + সাদা টেক্সট প্রিন্ট/PDF-এ যাতে বাদ না পড়ে */
+    -webkit-print-color-adjust:exact;
+    print-color-adjust:exact;
+    color-adjust:exact;
+  }
+  h1,h2,h3,h4{font-family:'Hind Siliguri','Noto Sans Bengali',sans-serif; font-weight:700;}
+  .mono{font-family:'JetBrains Mono',monospace; font-weight:700;}
+  svg.ic{display:block;}
+
+  /* ============ A4 PAGE FRAME ============ */
+  .page{
+    width:210mm;
+    min-height:297mm;
+    margin:10mm auto;
+    background:var(--paper);
+    box-shadow:0 4px 24px rgba(0,0,0,0.18);
+    position:relative;
+    break-after:page;
+    page-break-after:always;
+    -webkit-print-color-adjust:exact;
+    print-color-adjust:exact;
+  }
+  .page:last-child{break-after:auto; page-break-after:auto;}
+  .pad{padding:13mm 16mm;}
+
+  .tear{height:0; border-top:1.5px dashed #C9C2AE; margin:6mm 0; position:relative;}
+  .tear::before, .tear::after{
+    content:""; position:absolute; top:-6px; width:12px; height:12px;
+    background:var(--paper); border-radius:50%;
+  }
+  .tear::before{left:-16mm;}
+  .tear::after{right:-16mm;}
+
+  .page-footer{
+    display:flex; justify-content:space-between; align-items:center;
+    font-size:9px; color:var(--ink-soft); font-family:'JetBrains Mono',monospace;
+    border-top:1px dashed var(--line); padding-top:3mm; margin-top:6mm;
+  }
+
+  /* ============ COVER-STYLE DARK HEADER (used on page 1) ============ */
+  .cover-top{
+    background:var(--navy); color:#fff; padding:13mm 16mm 12mm; position:relative; overflow:hidden;
+    -webkit-print-color-adjust:exact; print-color-adjust:exact;
+  }
+  .cover-top::after{
+    content:""; position:absolute; inset:0;
+    background:
+      radial-gradient(circle at 90% -15%, rgba(59,91,219,0.5), transparent 55%),
+      radial-gradient(circle at 5% 115%, rgba(212,160,23,0.2), transparent 45%);
+  }
+  .brand-mark{display:flex; align-items:center; gap:10px; position:relative;}
+  .brand-mark .box{
+    width:36px; height:36px; border-radius:9px;
+    background:linear-gradient(135deg,var(--sky),var(--brand-light));
+    display:flex; align-items:center; justify-content:center;
+    font-family:'JetBrains Mono',monospace; font-weight:700; font-size:15px; color:#fff;
+  }
+  .brand-mark .name{font-size:17px; font-weight:700;}
+  .brand-mark .sub{font-size:10px; color:#AEB9E0; letter-spacing:1.5px; text-transform:uppercase; font-family:'JetBrains Mono',monospace;}
+  .hero-headline{margin-top:9mm; position:relative;}
+  .eyebrow{
+    font-family:'JetBrains Mono',monospace; font-size:10px; letter-spacing:2px;
+    text-transform:uppercase; color:var(--sky); margin-bottom:8px; display:block;
+  }
+  .hero-headline h1{font-size:25px; line-height:1.35; color:#fff;}
+  .hero-headline h1 em{color:#8FC5FF; font-style:normal;}
+  .hero-headline p{margin-top:9px; font-size:12.5px; color:#C7CFE8; max-width:150mm; line-height:1.7;}
+  .trial-chip{
+    display:inline-block; margin-top:12px;
+    background:rgba(212,160,23,0.18); border:1px solid rgba(212,160,23,0.6);
+    color:#F3D889; padding:6px 14px; border-radius:100px; font-size:11px; font-weight:600;
+  }
+  .hero-stats{
+    display:grid; grid-template-columns:repeat(4,1fr); gap:0; margin-top:11mm;
+    border-top:1px solid rgba(255,255,255,0.15); padding-top:9px; position:relative;
+  }
+  .hero-stats div{padding-right:10px; border-right:1px solid rgba(255,255,255,0.12);}
+  .hero-stats div:last-child{border-right:none;}
+  .hero-stats .num{font-family:'JetBrains Mono',monospace; font-size:17px; font-weight:700; color:#fff;}
+  .hero-stats .lbl{font-size:9.5px; color:#9FACD1; margin-top:2px;}
+
+  .lead-block{padding:11mm 16mm 0;}
+  .lead-block h2{font-size:17px; color:var(--navy); margin-bottom:6px;}
+  .lead-block p{font-size:12.3px; color:var(--ink-soft); line-height:1.85; margin-bottom:9px;}
+  .lead-block p b{color:var(--navy);}
+
+  .section-head{margin-bottom:6mm;}
+  .section-head .tag{
+    font-family:'JetBrains Mono',monospace; font-size:10px; letter-spacing:2px;
+    text-transform:uppercase; color:var(--brand); font-weight:700;
+  }
+  .section-head h2{font-size:19px; margin-top:5px; color:var(--navy);}
+  .section-head p.desc{color:var(--ink-soft); margin-top:6px; font-size:12px; line-height:1.7; max-width:160mm;}
+
+  /* ============ AUDIENCE + PRINCIPLES (page 2) ============ */
+  .audience{display:grid; grid-template-columns:repeat(2,1fr); gap:5mm;}
+  .audience .card{background:var(--card); border:1px solid var(--line); border-radius:11px; padding:11px 13px;}
+  .audience .card .who{font-weight:700; color:var(--navy); font-size:13.5px; margin-bottom:3px;}
+  .audience .card .eg{font-size:10.5px; color:var(--ink-soft); margin-bottom:7px;}
+  .audience .card .benefit{font-size:11px; color:var(--brand); font-weight:600; border-top:1px dashed var(--line); padding-top:7px;}
+
+  .principles{display:grid; grid-template-columns:repeat(2,1fr); gap:5mm; margin-top:6mm;}
+  .principles .p-item{background:#F1ECE0; border-radius:11px; padding:11px 13px;}
+  .principles .p-item .row{display:flex; align-items:center; gap:8px; margin-bottom:6px;}
+  .principles .p-item .ic-wrap{
+    width:26px; height:26px; border-radius:8px; background:#E4C978; color:#7A5B00;
+    display:flex; align-items:center; justify-content:center; flex-shrink:0;
+  }
+  .principles .p-item h4{font-size:13px; color:var(--navy);}
+  .principles .p-item p{font-size:11px; color:var(--ink-soft); line-height:1.65;}
+
+  /* ============ FEATURE CARDS (page 3, 4) ============ */
+  .feature-list{display:flex; flex-direction:column; gap:5mm;}
+  .feature-card{
+    background:var(--card); border:1px solid var(--line); border-radius:12px; padding:11px 14px;
+    display:grid; grid-template-columns:34px 1fr; gap:11px;
+  }
+  .feature-card .ficon{
+    width:34px; height:34px; border-radius:9px; display:flex; align-items:center; justify-content:center;
+    background:#EAF0FF; color:var(--brand);
+  }
+  .feature-card h3{font-size:14px; color:var(--navy); margin-bottom:4px;}
+  .feature-card .intro{font-size:11px; color:var(--ink-soft); line-height:1.65; margin-bottom:6px;}
+  .feature-card ul{list-style:none; display:grid; grid-template-columns:1fr 1fr; gap:2px 12px;}
+  .feature-card li{font-size:10.3px; color:var(--ink-soft); padding-left:14px; position:relative; line-height:1.55;}
+  .feature-card li::before{content:"✓"; position:absolute; left:0; color:var(--green); font-weight:700; font-size:9.5px;}
+  .feature-card.highlight{background:linear-gradient(160deg,#FBF3E0,#F6E9C8); border:1px solid #E4C978;}
+  .feature-card.highlight .ficon{background:#F3DFA0; color:var(--amber);}
+  .feature-card .badge{
+    display:inline-block; font-size:8px; font-family:'JetBrains Mono',monospace;
+    background:var(--navy); color:#fff; padding:2px 7px; border-radius:100px; margin-left:6px; vertical-align:middle;
+  }
+  .feature-card.highlight .badge{background:var(--amber);}
+
+  .strip{
+    background:var(--navy); border-radius:13px; padding:9mm 10mm; color:#fff; margin-top:5mm;
+    display:grid; grid-template-columns:1.15fr 1fr; gap:8mm; align-items:center;
+    -webkit-print-color-adjust:exact; print-color-adjust:exact;
+  }
+  .strip h3{font-size:14px; margin-bottom:6px; display:flex; align-items:center; gap:8px;}
+  .strip p{font-size:10.5px; color:#C7CFE8; line-height:1.7;}
+  .strip .mini-grid{display:grid; grid-template-columns:1fr 1fr; gap:6px;}
+  .strip .mini{
+    background:rgba(255,255,255,0.07); border:1px solid rgba(255,255,255,0.15);
+    border-radius:8px; padding:7px 9px; font-size:9.5px; color:#DCE3F5;
+  }
+  .strip .mini b{display:block; color:#fff; font-size:10.3px; margin-bottom:2px;}
+
+  /* ============ PRICING (page 5) ============ */
+  .pricing{display:grid; grid-template-columns:repeat(3,1fr); gap:5mm;}
+  .plan{background:var(--card); border:1px solid var(--line); border-radius:13px; padding:9mm 7mm; position:relative;}
+  .plan.standard{border:2px solid var(--brand); box-shadow:0 6px 18px rgba(30,64,175,0.14);}
+  .plan .pop{
+    position:absolute; top:-9px; left:50%; transform:translateX(-50%);
+    background:var(--brand); color:#fff; font-size:9px; font-weight:700;
+    padding:3px 11px; border-radius:100px; font-family:'JetBrains Mono',monospace;
+    -webkit-print-color-adjust:exact; print-color-adjust:exact;
+  }
+  .plan .pname{font-size:14.5px; font-weight:700; color:var(--navy);}
+  .plan .price{margin-top:8px;}
+  .plan .price .amt{font-family:'JetBrains Mono',monospace; font-size:23px; font-weight:700; color:var(--navy);}
+  .plan .price .per{font-size:10.5px; color:var(--ink-soft);}
+  .plan .price .yearly{font-size:10px; color:var(--green); margin-top:3px; font-weight:600;}
+  .plan .limits{display:flex; gap:10px; margin-top:9px; padding-top:9px; border-top:1px dashed var(--line); font-size:10px; color:var(--ink-soft);}
+  .plan .limits b{color:var(--navy); display:block; font-family:'JetBrains Mono',monospace; font-size:12px;}
+  .plan ul{list-style:none; margin-top:10px;}
+  .plan li{font-size:10.3px; color:var(--ink-soft); padding-left:15px; position:relative; margin-bottom:5.5px; line-height:1.4;}
+  .plan li::before{content:"✓"; position:absolute; left:0; color:var(--green); font-weight:700;}
+  .plan li.no{color:#C2BDAF;}
+  .plan li.no::before{content:"—"; color:#C2BDAF;}
+
+  .reassure{display:grid; grid-template-columns:repeat(3,1fr); gap:4mm; margin-top:6mm;}
+  .reassure .r-item{background:#F1ECE0; border-radius:10px; padding:9px 11px; font-size:10.3px; color:var(--ink-soft); line-height:1.6;}
+  .reassure .r-item b{display:block; color:var(--navy); font-size:12px; margin-bottom:3px;}
+
+  /* ============ PAGE 6 — CTA ============ */
+  .cta-page{
+    min-height:297mm; background:var(--navy); color:#fff;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    text-align:center; padding:16mm; position:relative; overflow:hidden;
+    -webkit-print-color-adjust:exact; print-color-adjust:exact;
+  }
+  .cta-page::after{
+    content:""; position:absolute; inset:0;
+    background:
+      radial-gradient(circle at 15% 10%, rgba(59,91,219,0.4), transparent 45%),
+      radial-gradient(circle at 85% 90%, rgba(212,160,23,0.22), transparent 45%);
+  }
+  .cta-page > *{position:relative;}
+  .cta-page .eyebrow{color:var(--sky);}
+  .cta-page h2{font-size:27px; margin-top:12px; max-width:150mm;}
+  .cta-page p.lead{color:#C7CFE8; margin-top:12px; font-size:13px; max-width:135mm; line-height:1.75;}
+  .cta-page .why-row{display:flex; gap:10mm; margin-top:12mm;}
+  .cta-page .why-item{max-width:44mm; font-size:10.5px; color:#B9C4E6;}
+  .cta-page .why-item .n{font-family:'JetBrains Mono',monospace; color:var(--amber-bright); font-size:12px; font-weight:700; margin-bottom:4px;}
+  .contact-row{display:flex; justify-content:center; gap:20px; margin-top:14mm; flex-wrap:wrap;}
+  .contact-row .c-item{
+    background:rgba(255,255,255,0.07); border:1px solid rgba(255,255,255,0.18);
+    padding:11px 22px; border-radius:11px; font-size:13px; min-width:52mm;
+    display:flex; align-items:center; gap:10px; justify-content:center;
+  }
+  .contact-row .c-item b{display:block; font-size:9.5px; color:#9FACD1; font-weight:400; margin-bottom:4px; font-family:'JetBrains Mono',monospace; letter-spacing:1.5px;}
+  .cta-page .trial-note{
+    margin-top:12mm; font-size:11px; color:#93A0C4;
+    border-top:1px dashed rgba(255,255,255,0.22); padding-top:8mm; max-width:130mm;
+  }
+
+  @media print{
+    html, body{background:#fff;}
+    .page{margin:0; box-shadow:none;}
+  }
+  @page{size:A4; margin:0;}
+</style>
+</head>
+<body>
+
+<!-- ============ ICON DEFINITIONS (Lucide, হুবহু মূল সফটওয়্যারে ব্যবহৃত) ============ -->
+<svg width="0" height="0" style="position:absolute">
+<defs>
+  <g id="ic-clipboard-list"><rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M12 11h4"/><path d="M12 16h4"/><path d="M8 11h.01"/><path d="M8 16h.01"/></g>
+  <g id="ic-users"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></g>
+  <g id="ic-user-cog"><circle cx="18" cy="15" r="3"/><circle cx="9" cy="7" r="4"/><path d="M10 15H6a4 4 0 0 0-4 4v2"/><path d="m21.7 16.4-.9-.3"/><path d="m15.2 13.9-.9-.3"/><path d="m16.6 18.7.3-.9"/><path d="m19.1 12.2.3-.9"/><path d="m19.6 18.7-.4-1"/><path d="m16.8 12.3-.4-1"/><path d="m14.3 16.6 1-.4"/><path d="m20.7 13.8 1-.4"/></g>
+  <g id="ic-calculator"><rect width="16" height="20" x="4" y="2" rx="2"/><line x1="8" x2="16" y1="6" y2="6"/><line x1="16" x2="16" y1="14" y2="18"/><path d="M16 10h.01"/><path d="M12 10h.01"/><path d="M8 10h.01"/><path d="M12 14h.01"/><path d="M8 14h.01"/><path d="M12 18h.01"/><path d="M8 18h.01"/></g>
+  <g id="ic-bar-chart"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></g>
+  <g id="ic-boxes"><path d="M2.97 12.92A2 2 0 0 0 2 14.63v3.24a2 2 0 0 0 .97 1.71l3 1.8a2 2 0 0 0 2.06 0L12 19v-5.5l-5-3-4.03 2.42Z"/><path d="m7 16.5-4.74-2.85"/><path d="m7 16.5 5-3"/><path d="M7 16.5v5.17"/><path d="M12 13.5V19l3.97 2.38a2 2 0 0 0 2.06 0l3-1.8a2 2 0 0 0 .97-1.71v-3.24a2 2 0 0 0-.97-1.71L17 10.5l-5 3Z"/><path d="m17 16.5-5-3"/><path d="m17 16.5 4.74-2.85"/><path d="M17 16.5v5.17"/><path d="M7.97 4.42A2 2 0 0 0 7 6.13v4.37l5 3 5-3V6.13a2 2 0 0 0-.97-1.71l-3-1.8a2 2 0 0 0-2.06 0l-3 1.8Z"/><path d="M12 8 7.26 5.15"/><path d="m12 8 4.74-2.85"/><path d="M12 13.5V8"/></g>
+  <g id="ic-message-circle"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/></g>
+  <g id="ic-package-search"><path d="M21 10V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l2-1.14"/><path d="m7.5 4.27 9 5.15"/><polyline points="3.29 7 12 12 20.71 7"/><line x1="12" x2="12" y1="22" y2="12"/><circle cx="18.5" cy="15.5" r="2.5"/><path d="M20.27 17.27 22 19"/></g>
+  <g id="ic-wallet"><path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1"/><path d="M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4"/></g>
+  <g id="ic-wifi-off"><path d="M12 20h.01"/><path d="M8.5 16.429a5 5 0 0 1 7 0"/><path d="M5 12.859a10 10 0 0 1 5.17-2.69"/><path d="M19 12.859a10 10 0 0 0-2.007-1.523"/><path d="M2 8.82a15 15 0 0 1 4.177-2.643"/><path d="M22 8.82a15 15 0 0 0-11.288-3.764"/><path d="m2 2 20 20"/></g>
+  <g id="ic-globe"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></g>
+  <g id="ic-smile"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" x2="9.01" y1="9" y2="9"/><line x1="15" x2="15.01" y1="9" y2="9"/></g>
+  <g id="ic-printer"><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M6 9V3a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v6"/><rect x="6" y="14" width="12" height="8" rx="1"/></g>
+  <g id="ic-shield-check"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></g>
+  <g id="ic-trending-up"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></g>
+</defs>
+</svg>
+
+<!-- ============ PAGE 1 — COVER ============ -->
+<div class="page">
+  <div class="cover-top">
+    <div class="brand-mark">
+      <div class="box">PP</div>
+      <div>
+        <div class="name">AL-IHSAN PrintERP</div>
+        <div class="sub">প্রিন্টিং প্রেস ম্যানেজমেন্ট সফটওয়্যার</div>
+      </div>
+    </div>
+    <div class="hero-headline">
+      <span class="eyebrow">সম্পূর্ণ ডিজিটাল সমাধান</span>
+      <h1>আপনার প্রেসের <em>অর্ডার, হিসাব ও স্টাফ</em> — এক জায়গায়, বাংলায়, ইন্টারনেট ছাড়াও</h1>
+      <p>প্রতিদিন কতগুলো অর্ডার এসেছে, কার কাছে কত বকেয়া, কোন স্টাফের কমিশন কত হলো — এসব মনে রাখতে গিয়ে হিমশিম খাচ্ছেন? খাতা-কলম হারিয়ে যায়, হিসাবে ভুল হয়, আর কাস্টমারের সাথে বকেয়া নিয়ে বিতর্ক লেগেই থাকে। AL-IHSAN PrintERP এই সব সমস্যার সমাধান একটা জায়গায় নিয়ে এসেছে — সহজ, বাংলা ভাষায়, আপনার প্রেসের জন্যই বানানো।</p>
+      <span class="trial-chip">৩ দিন সম্পূর্ণ ফ্রি ট্রায়াল — কোনো কার্ড লাগবে না</span>
+    </div>
+    <div class="hero-stats">
+      <div><div class="num">২০+</div><div class="lbl">মডিউল / ফিচার সেট</div></div>
+      <div><div class="num">০৳</div><div class="lbl">শুরু করতে খরচ</div></div>
+      <div><div class="num">✓</div><div class="lbl">অফলাইনেও কাজ করে</div></div>
+      <div><div class="num">বাং</div><div class="lbl">সম্পূর্ণ বাংলা ইন্টারফেস</div></div>
+    </div>
+  </div>
+
+  <div class="lead-block">
+    <h2>কেন এখনই এই সফটওয়্যারে যাওয়া উচিত?</h2>
+    <p>বাংলাদেশের প্রায় প্রতিটা প্রিন্টিং প্রেসই এখনো খাতা-কলম অথবা একাধিক আলাদা অ্যাপ দিয়ে ব্যবসা চালায় — একটাতে অর্ডার লেখা হয়, আরেকটাতে হিসাব, স্টাফের কমিশন হয়তো মুখে মুখে মনে রাখা হয়। এতে করে <b>প্রতি মাসে গড়ে যে টাকা বকেয়া থেকে যায় বা ভুল হিসাবে হারিয়ে যায়, সেটা প্রায়ই এই সফটওয়্যারের মাসিক খরচের চেয়ে অনেক বেশি।</b></p>
+    <p>AL-IHSAN PrintERP ঠিক বাংলাদেশের প্রিন্টিং ব্যবসার বাস্তবতা মাথায় রেখে বানানো — বিদ্যুৎ বা ইন্টারনেট চলে গেলেও কাজ থামে না, স্টাফ কম শিক্ষিত হলেও সহজে শিখে নিতে পারেন, আর প্রতিটা টাকার হিসাব স্বচ্ছভাবে সংরক্ষিত থাকে। <b>একবার ব্যবহার শুরু করলে বুঝবেন, কীভাবে এতদিন এসব ছাড়া ব্যবসা চালিয়েছেন।</b></p>
+  </div>
+
+  <div class="page-footer" style="margin:6mm 16mm 0;">
+    <span>AL-IHSAN PrintERP</span>
+    <span>পৃষ্ঠা ১ / ৬</span>
+  </div>
+</div>
+
+<!-- ============ PAGE 2 — কাদের জন্য + মূলনীতি ============ -->
+<div class="page">
+  <div class="pad">
+    <div class="section-head">
+      <span class="tag">কাদের জন্য</span>
+      <h2>ছোট থেকে বড় — যেকোনো আকারের প্রেসের জন্য</h2>
+      <p class="desc">আপনার ব্যবসা যেই পর্যায়েই থাকুক, ঠিক প্রয়োজন অনুযায়ী প্যাকেজ বেছে নিতে পারবেন — ব্যবসা বাড়ার সাথে সাথে যেকোনো সময় বড় প্যাকেজে আপগ্রেড করা যায়, কোনো ডেটা হারানোর ভয় ছাড়াই।</p>
+    </div>
+    <div class="audience">
+      <div class="card">
+        <div class="who">একক উদ্যোক্তা</div>
+        <div class="eg">একজনই সব সামলান — অর্ডার নেওয়া থেকে ডেলিভারি পর্যন্ত</div>
+        <div class="benefit">অর্ডার ট্র্যাক, চালান প্রিন্ট, বকেয়ার নির্ভুল হিসাব — সবই একার পক্ষে সামলানো সহজ হয়ে যায়</div>
+      </div>
+      <div class="card">
+        <div class="who">ছোট প্রেস</div>
+        <div class="eg">২–৫ জন স্টাফ নিয়ে চলা প্রতিষ্ঠান</div>
+        <div class="benefit">কার কাজ কতদূর, কমিশন কত, খরচ কোথায় যাচ্ছে — সব একনজরে দেখা যায়</div>
+      </div>
+      <div class="card">
+        <div class="who">মাঝারি প্রেস</div>
+        <div class="eg">৫–২০ জন স্টাফ, ১–২টা শাখা</div>
+        <div class="benefit">শাখাওয়ারি মুনাফা তুলনা করে বুঝবেন কোন শাখা এগিয়ে, কোথায় নজর দিতে হবে</div>
+      </div>
+      <div class="card">
+        <div class="who">বড় প্রেস</div>
+        <div class="eg">২০+ জন স্টাফ, একাধিক শাখা</div>
+        <div class="benefit">সাপ্লায়ার, স্টক, কোটেশন সহ পুরো ব্যবসার প্রতিটা দিক এক প্ল্যাটফর্মে নিয়ন্ত্রণ করুন</div>
+      </div>
+    </div>
+
+    <div class="section-head" style="margin-top:9mm;">
+      <span class="tag">মূলনীতি</span>
+      <h2>এই সফটওয়্যার আপনার ব্যবসা বুঝেই বানানো</h2>
+    </div>
+    <div class="principles">
+      <div class="p-item">
+        <div class="row">
+          <div class="ic-wrap"><svg class="ic" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><use href="#ic-wifi-off"/></svg></div>
+          <h4>ইন্টারনেট চলে গেলেও কাজ থামে না</h4>
+        </div>
+        <p>দোকানের নেট বিচ্ছিন্ন হয়ে গেলেও অর্ডার নেওয়া, পেমেন্ট রেকর্ড করা, চালান প্রিন্ট করা — সবকিছু স্বাভাবিকভাবেই চলতে থাকবে। নেট ফিরে এলে সব ডেটা নিজে থেকেই সিঙ্ক হয়ে যায়, কোনো তথ্য হারায় না।</p>
+      </div>
+      <div class="p-item">
+        <div class="row">
+          <div class="ic-wrap"><svg class="ic" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><use href="#ic-globe"/></svg></div>
+          <h4>সম্পূর্ণ বাংলায়, তবু চাইলে ইংরেজিও</h4>
+        </div>
+        <p>মেনু, বার্তা, চালান, রসিদ — সবকিছু আপনার নিজের ভাষায়। স্টাফের ইংরেজি না জানলেও কোনো সমস্যা নেই। প্রয়োজন হলে এক ক্লিকেই পুরো সফটওয়্যার ইংরেজিতে বদলে ফেলা যায়।</p>
+      </div>
+      <div class="p-item">
+        <div class="row">
+          <div class="ic-wrap"><svg class="ic" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><use href="#ic-smile"/></svg></div>
+          <h4>জটিলতা ভেতরে, সরলতা সামনে</h4>
+        </div>
+        <p>হিসাব-নিকাশ যত জটিলই হোক, সেটা সফটওয়্যারের ভেতরেই স্বয়ংক্রিয়ভাবে হয়ে যাবে। আপনার স্টাফের সামনে থাকবে শুধু কয়েকটা সহজ বোতাম — নতুন কর্মীও একদিনেই শিখে নিতে পারবেন।</p>
+      </div>
+      <div class="p-item">
+        <div class="row">
+          <div class="ic-wrap"><svg class="ic" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><use href="#ic-printer"/></svg></div>
+          <h4>প্রিন্ট-রেডি — নিজের প্রিন্টারেই</h4>
+        </div>
+        <p>যেকোনো ডেলিভারি চালান, পেমেন্ট রসিদ বা রিপোর্ট এক ক্লিকে আপনার দোকানের নিজস্ব প্রিন্টারে প্রিন্ট করে ফেলা যায় — আলাদা কোনো সফটওয়্যার বা কনভার্টার লাগে না।</p>
+      </div>
+    </div>
+  </div>
+  <div class="page-footer" style="margin:6mm 16mm 0;">
+    <span>AL-IHSAN PrintERP</span>
+    <span>পৃষ্ঠা ২ / ৬</span>
+  </div>
+</div>
+
+<!-- ============ PAGE 3 — FEATURES PART 1 ============ -->
+<div class="page">
+  <div class="pad">
+    <div class="section-head">
+      <span class="tag">মূল ফিচার — ১</span>
+      <h2>প্রতিদিনের সবচেয়ে জরুরি কাজগুলো</h2>
+      <p class="desc">যে কাজগুলো আপনি প্রতিদিন করেন — অর্ডার নেওয়া, টাকা হিসাব রাখা, স্টাফ সামলানো — সেগুলো এখন হবে দ্রুত, নির্ভুল আর ঝামেলাহীন।</p>
+    </div>
+
+    <div class="feature-list">
+      <div class="feature-card">
+        <div class="ficon"><svg class="ic" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><use href="#ic-clipboard-list"/></svg></div>
+        <div>
+          <h3>অর্ডার ও ডেলিভারি ব্যবস্থাপনা</h3>
+          <p class="intro">নতুন অর্ডার নেওয়া থেকে ডেলিভারি চালান প্রিন্ট পর্যন্ত পুরো প্রক্রিয়া এখন কয়েক ক্লিকের ব্যাপার। কোনো অর্ডার হারিয়ে যাওয়ার বা ভুলে যাওয়ার সুযোগ নেই — সব স্টাফ একই তালিকায় লাইভ দেখতে পান।</p>
+          <ul>
+            <li>কাস্টমার সার্চ করলেই তথ্য স্বয়ংক্রিয় পূরণ</li>
+            <li>একাধিক আইটেম, ডিসকাউন্ট — স্বয়ংক্রিয় হিসাব</li>
+            <li>এক ক্লিকে ডেলিভারি চালান প্রিন্ট</li>
+            <li>শেয়ার্ড "চলমান কাজের তালিকা" — সবাই একসাথে দেখেন</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="feature-card">
+        <div class="ficon"><svg class="ic" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><use href="#ic-users"/></svg></div>
+        <div>
+          <h3>কাস্টমার ও পেমেন্ট ট্র্যাকিং</h3>
+          <p class="intro">কে কত বকেয়া রেখেছে, কবে শেষ পেমেন্ট দিয়েছে — এসব নিয়ে আর কাস্টমারের সাথে বাদানুবাদ করতে হবে না। প্রতিটা টাকার হিসাব স্বয়ংক্রিয়ভাবে, স্বচ্ছভাবে জমা থাকে।</p>
+          <ul>
+            <li>প্রতিটি কাস্টমারের সম্পূর্ণ অর্ডার-পেমেন্ট ইতিহাস</li>
+            <li>আংশিক পেমেন্ট, একাধিক কিস্তি সাপোর্ট</li>
+            <li>নগদ / বিকাশ / নগদ (Nagad) / রকেট / ব্যাংক</li>
+            <li>বকেয়া স্বয়ংক্রিয়ভাবে আপডেট হয়</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="feature-card">
+        <div class="ficon"><svg class="ic" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><use href="#ic-user-cog"/></svg></div>
+        <div>
+          <h3>স্টাফ, কমিশন ও শাখা ব্যবস্থাপনা</h3>
+          <p class="intro">স্টাফের কমিশন নিয়ে ভুল বোঝাবুঝি বা বিশ্বাসের সংকট আর হবে না — প্রতিটা হিসাব সফটওয়্যারই স্বয়ংক্রিয়ভাবে করে দেয়, সবার সামনে স্বচ্ছভাবে। একাধিক শাখা থাকলে প্রতিটার হিসাব আলাদাভাবে দেখা যায়।</p>
+          <ul>
+            <li>রোল-ভিত্তিক অ্যাক্সেস — কে কী দেখবে, নিয়ন্ত্রিত</li>
+            <li>স্বয়ংক্রিয় কমিশন হিসাব, কোনো ভুল নেই</li>
+            <li>স্টাফের উত্তোলন আবেদন ও অনুমোদন সিস্টেম</li>
+            <li>একাধিক শাখা — আলাদা হিসাব ও তুলনা</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="feature-card">
+        <div class="ficon"><svg class="ic" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><use href="#ic-calculator"/></svg></div>
+        <div>
+          <h3>কস্টিং ও কোটেশন — সঠিক দামে বিক্রি করুন</h3>
+          <p class="intro">অনেক সময় না বুঝেই কম দামে কাজ নেওয়া হয়ে যায়, লাভের বদলে লোকসান হয়। কস্ট ক্যালকুলেটর দিয়ে প্রতিটা কাজের প্রকৃত খরচ বের করে, তার ওপর মুনাফা বসিয়ে সঠিক দাম নির্ধারণ করুন।</p>
+          <ul>
+            <li>নিজের মতো খরচ-বিভাগ বানিয়ে ক্যালকুলেট করুন</li>
+            <li>রেডি টেমপ্লেট: অফসেট, ডিজিটাল, ব্যানার, বাইন্ডিং</li>
+            <li>মুনাফার হার বসালেই স্বয়ংক্রিয় বিক্রয়মূল্য</li>
+            <li>কোটেশন গ্রাহক গ্রহণ করলেই এক ক্লিকে অর্ডার তৈরি</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="feature-card">
+        <div class="ficon"><svg class="ic" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><use href="#ic-bar-chart"/></svg></div>
+        <div>
+          <h3>রিপোর্ট ও ব্যবসায়িক বিশ্লেষণ</h3>
+          <p class="intro">মাস শেষে আসলে কত লাভ হলো, কোন আইটেম সবচেয়ে বেশি বিক্রি হচ্ছে, কোন স্টাফ সবচেয়ে ভালো পারফর্ম করছে — এসব প্রশ্নের উত্তর এখন এক নজরেই পাবেন, হিসাবরক্ষকের জন্য অপেক্ষা করতে হবে না।</p>
+          <ul>
+            <li>গ্রস ও নেট মুনাফা এক নজরে</li>
+            <li>শীর্ষ আইটেম ও শীর্ষ কাস্টমার তালিকা</li>
+            <li>স্টাফ কর্মক্ষমতা তুলনা</li>
+            <li>Excel/CSV এক্সপোর্ট — হিসাবরক্ষকের জন্য</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="page-footer" style="margin:0 16mm;">
+    <span>AL-IHSAN PrintERP</span>
+    <span>পৃষ্ঠা ৩ / ৬</span>
+  </div>
+</div>
+
+<!-- ============ PAGE 4 — FEATURES PART 2 ============ -->
+<div class="page">
+  <div class="pad">
+    <div class="section-head">
+      <span class="tag">মূল ফিচার — ২</span>
+      <h2>যা আপনাকে প্রতিযোগীদের চেয়ে এগিয়ে রাখবে</h2>
+    </div>
+
+    <div class="feature-list">
+      <div class="feature-card">
+        <div class="ficon"><svg class="ic" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><use href="#ic-boxes"/></svg></div>
+        <div>
+          <h3>স্টক ও সাপ্লায়ার ব্যবস্থাপনা</h3>
+          <p class="intro">কাজের মাঝপথে কাগজ বা কালি শেষ হয়ে যাওয়ার বিব্রতকর পরিস্থিতি আর হবে না। সর্বনিম্ন সীমার নিচে নামলেই সফটওয়্যার নিজে থেকেই সতর্ক করে দেবে, আর সাপ্লায়ারের হিসাবও থাকবে গোছানো।</p>
+          <ul>
+            <li>কাগজ, কালি ইত্যাদির লাইভ স্টক হিসাব</li>
+            <li>সর্বনিম্ন সীমার নিচে গেলে স্বয়ংক্রিয় সতর্কতা</li>
+            <li>সাপ্লায়ার লেজার — ক্রয়, পেমেন্ট, বাকি</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="feature-card">
+        <div class="ficon"><svg class="ic" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><use href="#ic-message-circle"/></svg></div>
+        <div>
+          <h3>SMS, Email ও WhatsApp নোটিফিকেশন <span class="badge">নতুন</span></h3>
+          <p class="intro">কাস্টমারকে বারবার ফোন করে বকেয়ার কথা মনে করিয়ে দেওয়ার ঝামেলা নেই। এক ক্লিকে WhatsApp-এ চালান বা বকেয়ার লিংক পাঠিয়ে দিন — কাস্টমার নিজেই দেখে নেবেন, আপনার সময় বাঁচবে, সম্পর্কও থাকবে পেশাদার।</p>
+          <ul>
+            <li>ডেলিভারি ও বকেয়া রিমাইন্ডার SMS/Email-এ</li>
+            <li>এক ক্লিকে WhatsApp-এ চালানের লিংক পাঠান</li>
+            <li>কাস্টমার নিজেই ক্লিক করে বিস্তারিত দেখতে পারেন</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="feature-card">
+        <div class="ficon"><svg class="ic" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><use href="#ic-package-search"/></svg></div>
+        <div>
+          <h3>গ্রাহক পোর্টাল — কাস্টমারকে দিন প্রফেশনাল অভিজ্ঞতা</h3>
+          <p class="intro">কাস্টমার নিজেই তার অর্ডারের অবস্থা যেকোনো সময় দেখে নিতে পারবেন — লগইনের ঝামেলা ছাড়াই। এটা আপনার প্রতিষ্ঠানকে আরও বড়, আরও নির্ভরযোগ্য মনে করাবে কাস্টমারের কাছে।</p>
+          <ul>
+            <li>লগইন ছাড়াই অর্ডার নম্বর দিয়ে ট্র্যাকিং</li>
+            <li>রিয়েলটাইম স্ট্যাটাস ও টাইমলাইন</li>
+            <li>ইনভয়েস দেখা ও ডাউনলোড</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="feature-card highlight">
+        <div class="ficon"><svg class="ic" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><use href="#ic-wallet"/></svg></div>
+        <div>
+          <h3>যাকাত ক্যালকুলেটর <span class="badge">সব প্যাকেজে সম্পূর্ণ ফ্রি</span></h3>
+          <p class="intro">বছর শেষে ব্যবসার যাকাত হিসাব করা নিয়ে অনেকেই দ্বিধায় থাকেন — কোনটা ধরতে হবে, কতটা। এই ফিচারে আপনার ব্যবসার নগদ, বকেয়া ও স্টকের হিসাব স্বয়ংক্রিয়ভাবেই যোগ হয়ে যায়, আপনি শুধু ব্যক্তিগত সম্পদটুকু যোগ করবেন — বাকি হিসাব সফটওয়্যার করে দেবে। এটা শুধু একটা ফিচার না, আপনার ব্যবসাকে হালাল ও স্বচ্ছভাবে পরিচালনার একটা প্রতিশ্রুতি।</p>
+          <ul>
+            <li>ব্যবসার হিসাব স্বয়ংক্রিয়ভাবে যোগ হয়</li>
+            <li>নিসাব অনুযায়ী প্রদেয় যাকাত স্বয়ংক্রিয় হিসাব</li>
+            <li>৮টা খাতে বিতরণ ট্র্যাকিং + বার্ষিক রিপোর্ট</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="strip">
+      <div>
+        <h3><svg class="ic" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><use href="#ic-wifi-off"/></svg> দোকানে নেট চলে গেলেও কাজ থামবে না</h3>
+        <p>অর্ডার নেওয়া, পেমেন্ট রেকর্ড, চালান প্রিন্ট — সবই অফলাইনে কাজ করে। নেট ফিরলে সব ডেটা নিজে থেকেই সিঙ্ক হয়ে যায়। মোবাইল বা ট্যাবে হোম-স্ক্রিনে অ্যাপের মতো বসিয়ে নেওয়া যায় — আলাদা করে কিছু ইনস্টল করার দরকার নেই।</p>
+      </div>
+      <div class="mini-grid">
+        <div class="mini"><b>অর্ডার তৈরি</b>অফলাইনেও কাজ করে</div>
+        <div class="mini"><b>পেমেন্ট রেকর্ড</b>অফলাইনেও কাজ করে</div>
+        <div class="mini"><b>চালান প্রিন্ট</b>অফলাইনেও কাজ করে</div>
+        <div class="mini"><b>মোবাইল/ট্যাব</b>হোম-স্ক্রিন অ্যাপের মতো</div>
+      </div>
+    </div>
+  </div>
+  <div class="page-footer" style="margin:0 16mm;">
+    <span>AL-IHSAN PrintERP</span>
+    <span>পৃষ্ঠা ৪ / ৬</span>
+  </div>
+</div>
+
+<!-- ============ PAGE 5 — PRICING ============ -->
+<div class="page">
+  <div class="pad">
+    <div class="section-head">
+      <span class="tag">সাবস্ক্রিপশন প্যাকেজ</span>
+      <h2>যতটুকু দরকার ততটুকুই — বাড়লে আপগ্রেড করুন</h2>
+      <p class="desc">বার্ষিক নিলে ২ মাসের সমান ছাড় পাবেন। সব প্যাকেজে ৩ দিনের ফ্রি ট্রায়াল দিয়ে শুরু করা যায়, কোনো কার্ড ছাড়াই — নিজে ব্যবহার করে দেখে তারপর সিদ্ধান্ত নিন।</p>
+    </div>
+
+    <div class="pricing">
+      <div class="plan">
+        <div class="pname">বেসিক</div>
+        <div class="price">
+          <span class="amt">৳৩০০</span><span class="per"> / মাস</span>
+          <div class="yearly">বার্ষিক ৳৩,০০০ (২ মাস ফ্রি)</div>
+        </div>
+        <div class="limits">
+          <div><b>৩ জন</b>স্টাফ</div>
+          <div><b>১টি</b>শাখা</div>
+        </div>
+        <ul>
+          <li>অর্ডার ও কাস্টমার ব্যবস্থাপনা</li>
+          <li>পেমেন্ট ট্র্যাকিং ও চালান প্রিন্ট</li>
+          <li>চলমান কাজের তালিকা</li>
+          <li>বেসিক রিপোর্ট</li>
+          <li>যাকাত মডিউল</li>
+          <li>অফলাইন সাপোর্ট</li>
+          <li class="no">কস্টিং ও কমিশন সিস্টেম</li>
+          <li class="no">স্টক ও সাপ্লায়ার</li>
+        </ul>
+      </div>
+
+      <div class="plan standard">
+        <div class="pop">সবচেয়ে জনপ্রিয়</div>
+        <div class="pname">স্ট্যান্ডার্ড</div>
+        <div class="price">
+          <span class="amt">৳৫০০</span><span class="per"> / মাস</span>
+          <div class="yearly">বার্ষিক ৳৫,০০০ (২ মাস ফ্রি)</div>
+        </div>
+        <div class="limits">
+          <div><b>১০ জন</b>স্টাফ</div>
+          <div><b>৩টি</b>শাখা</div>
+        </div>
+        <ul>
+          <li>বেসিকের সবকিছু, এবং —</li>
+          <li>কস্ট ক্যালকুলেটর ও কস্টিং ব্যবস্থাপনা</li>
+          <li>কমিশন সিস্টেম ও খরচ ব্যবস্থাপনা</li>
+          <li>কোটেশন / দরপত্র</li>
+          <li>স্টক ও সাপ্লায়ার ম্যানেজমেন্ট</li>
+          <li>মাল্টি-ব্রাঞ্চ ও উন্নত বিশ্লেষণ</li>
+          <li class="no">SMS/Email/WhatsApp নোটিফিকেশন</li>
+        </ul>
+      </div>
+
+      <div class="plan">
+        <div class="pname">প্রিমিয়াম</div>
+        <div class="price">
+          <span class="amt">৳৭০০</span><span class="per"> / মাস</span>
+          <div class="yearly">বার্ষিক ৳৭,০০০ (২ মাস ফ্রি)</div>
+        </div>
+        <div class="limits">
+          <div><b>সীমাহীন</b>স্টাফ</div>
+          <div><b>সীমাহীন</b>শাখা</div>
+        </div>
+        <ul>
+          <li>স্ট্যান্ডার্ডের সবকিছু, এবং —</li>
+          <li>SMS ও Email নোটিফিকেশন</li>
+          <li>WhatsApp-এ চালান/বকেয়া পাঠানো</li>
+          <li>ডেটা এক্সপোর্ট (CSV/Excel)</li>
+          <li>আউটসোর্স ট্র্যাকিং</li>
+          <li>গ্রাহক পোর্টাল</li>
+          <li>অগ্রাধিকার সাপোর্ট</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="reassure">
+      <div class="r-item"><b>যেকোনো সময় আপগ্রেড</b>ব্যবসা বাড়লে এক ক্লিকে বড় প্যাকেজে যান, কোনো ডেটা হারাবে না।</div>
+      <div class="r-item"><b>ডেটা সবসময় নিরাপদ</b>প্রতিদিনের সব হিসাব সুরক্ষিতভাবে সংরক্ষিত থাকে, হারানোর ভয় নেই।</div>
+      <div class="r-item"><b>বাধ্যবাধকতা নেই</b>৩ দিনের ট্রায়াল শেষে পছন্দ না হলে কোনো চার্জ কাটা হবে না।</div>
+    </div>
+  </div>
+  <div class="page-footer" style="margin:6mm 16mm 0;">
+    <span>AL-IHSAN PrintERP</span>
+    <span>পৃষ্ঠা ৫ / ৬</span>
+  </div>
+</div>
+
+<!-- ============ PAGE 6 — CTA ============ -->
+<div class="page">
+  <div class="cta-page">
+    <span class="eyebrow">শুরু করুন আজই</span>
+    <h2>৩ দিন সম্পূর্ণ ফ্রি ব্যবহার করে দেখুন</h2>
+    <p class="lead">কোনো কার্ড লাগবে না। ৩ দিন পর পছন্দ না হলে কোনো বাধ্যবাধকতা নেই — আপনার সব ডেটা সুরক্ষিত থাকবে। যোগাযোগ করুন, আমরা আপনার প্রেস সেটআপ করে দিতে সরাসরি সাহায্য করব।</p>
+
+    <div class="why-row">
+      <div class="why-item"><div class="n">০১</div>প্রতিদিন অর্ডার ও বকেয়া হারানো বন্ধ করুন</div>
+      <div class="why-item"><div class="n">০২</div>স্টাফের কমিশন হিসাব নিয়ে সন্দেহ দূর করুন</div>
+      <div class="why-item"><div class="n">০৩</div>কাস্টমারকে দিন আরও পেশাদার অভিজ্ঞতা</div>
+    </div>
+
+    <div class="contact-row">
+      <div class="c-item">
+        <svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><use href="#ic-message-circle"/></svg>
+        <div><b>WhatsApp</b>01752564338</div>
+      </div>
+      <div class="c-item">
+        <svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><use href="#ic-shield-check"/></svg>
+        <div><b>ইমেইল</b>alihsanprinterp@gmail.com</div>
+      </div>
+    </div>
+
+    <div class="trial-note">AL-IHSAN PrintERP — আপনার প্রিন্টিং ব্যবসার জন্য তৈরি সম্পূর্ণ বাংলা ডিজিটাল সমাধান</div>
+  </div>
+</div>
+
+</body>
+</html>

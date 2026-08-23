@@ -1,0 +1,98 @@
+# netlify.toml — Al-Ihsan PrintERP Free Edition
+#
+# This file only exists on the `free-edition` branch. The `main` branch
+# (Vercel/Main Edition) does not use Netlify and must not include this file.
+#
+# Free Edition Blueprint reference: Phase F1 #1
+# (free-edition ব্রাঞ্চ তৈরি, netlify.toml + @netlify/plugin-nextjs সেটআপ)
+
+[build]
+  command = "npm run build"
+  publish = ".next"
+
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
+
+[build.environment]
+  NODE_VERSION = "20"
+
+# ── Environment variables (set actual values in Netlify UI: Site
+#    configuration → Environment variables — never commit real values here) ──
+#
+# NEXT_PUBLIC_FIREBASE_API_KEY
+# NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN
+# NEXT_PUBLIC_FIREBASE_PROJECT_ID
+# NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET
+# NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID
+# NEXT_PUBLIC_FIREBASE_APP_ID
+# NEXT_PUBLIC_USE_FIREBASE_EMULATOR
+#
+# CLOUD_FUNCTION_BASE_URL is intentionally NOT listed here. On the Free
+# Edition (Firebase Spark plan) there are no deployed Cloud Functions to
+# point to — see MODULE_README.md "Free Edition — Phase F1 #1" section for
+# the wiring-gap finding that must be resolved in the sessions that migrate
+# onTenantSelfSignup / onAdminCreateTenant / getPortalOrderStatus.
+#
+# Firebase Admin SDK credentials — required by netlify/functions/*.mts
+# (Scheduled Functions) AND app/api/* routes, both of which import
+# lib/firebase/admin.ts:
+#
+# FIREBASE_ADMIN_PROJECT_ID
+# FIREBASE_ADMIN_CLIENT_EMAIL
+# FIREBASE_ADMIN_PRIVATE_KEY
+#
+# Cloudinary (Phase F1 #8 — tenant logo upload, unsigned upload preset,
+# replaces Firebase Storage which requires the paid Blaze plan). Both are
+# NEXT_PUBLIC_ (browser-exposed) — see .env.local.example for how to create
+# the unsigned preset in the Cloudinary Console, and
+# lib/firebase/tenant-settings.ts for the upload call itself:
+#
+# NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME
+# NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET
+#
+# SMS/Email real-sending gateways (Phase F3 — blueprint modules #28/#29,
+# Premium-plan-only, checked server-side in app/api/notifications/*):
+#
+# SSLWIRELESS_API_TOKEN
+# SSLWIRELESS_SID
+# SSLWIRELESS_DOMAIN         (optional, defaults to https://smsplus.sslwireless.com)
+# RESEND_API_KEY
+# RESEND_FROM_EMAIL          (must be a verified sender/domain in Resend)
+#
+# WhatsApp gateway (Phase 4 — blueprint "WhatsApp ইন্টিগ্রেশন", Premium-plan
+# only, manual-send only — see lib/server/whatsapp-gateway.ts's header
+# comment for the FULL setup steps, including the exact message-template
+# text that must be created and approved in Meta Business Manager before
+# any of this will actually deliver a message):
+#
+# WHATSAPP_ACCESS_TOKEN      Meta Business → System User permanent token
+# WHATSAPP_PHONE_NUMBER_ID   Meta Business → WhatsApp → API Setup → "Phone number ID"
+# WHATSAPP_TEMPLATE_NAME     Exact name of your Meta-APPROVED message template (required)
+# WHATSAPP_TEMPLATE_LANG     Template's approved language code (optional, defaults to "bn")
+
+# ── Scheduled Functions (Free Edition Blueprint অংশ ৫, Phase F1, সারি #২) ──
+# check-trial-expiry.mts, check-quotation-expiry.mts,
+# send-daily-notifications.mts, hard-delete-expired-orders.mts, and
+# retry-notification-deliveries.mts (Phase F3 — SMS/Email retry queue,
+# blueprint ১৩.৩, runs every 30 minutes) each declare their own cron
+# schedule inline via
+# `export const config: Config = { schedule: "..." }` — see the
+# "Cron expression inline in function code" pattern in Netlify's docs. No
+# [functions."..."] schedule entries are needed here; they're intentionally
+# kept in the function files themselves so the schedule sits next to the
+# code + comments explaining the Asia/Dhaka → UTC conversion trade-off
+# (Netlify cron always runs in UTC, unlike Firebase Cloud Scheduler's
+# .timeZone("Asia/Dhaka") — see each function file's header comment).
+
+# ── Migration Map complete (Free Edition Blueprint অংশ ১.২) ──────────────
+# As of Phase F1 #6 (generate-order-numbers.mts / generate-quotation-numbers.mts,
+# the Polling Pattern rows), every row of the Function Migration Map has been
+# migrated. The root-level `functions/` directory (original Firebase Cloud
+# Functions source, `functions/src/*.ts`) is now obsolete on this
+# (`free-edition`) branch — it is NOT referenced by this netlify.toml (Netlify
+# only picks up `netlify/functions/`, a separate directory) and is NOT part of
+# the Next.js build (no `app/` or `lib/` file imports from `functions/`), so no
+# build-ignore configuration is needed here to exclude it. It has deliberately
+# been left in place (not deleted) because the `main` branch (Vercel/Main
+# Edition, Blaze plan) still deploys it as real Firebase Cloud Functions — see
+# MODULE_README.md "Free Edition — Phase F1 #6" for the full note.

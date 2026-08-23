@@ -1,0 +1,78 @@
+{
+  "name": "AL-IHSAN PrintERP — প্রিন্টিং ব্যবস্থাপনা",
+  "short_name": "AL-IHSAN PrintERP",
+  "description": "প্রিন্টিং প্রেসের সম্পূর্ণ ব্যবস্থাপনা সফটওয়্যার",
+  "start_url": "/dashboard",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#1E293B",
+  "theme_color": "#1E40AF",
+  "lang": "bn",
+  "categories": ["business", "productivity"],
+  "icons": [
+    {
+      "src": "/icons/icon-72.png",
+      "sizes": "72x72",
+      "type": "image/png",
+      "purpose": "maskable any"
+    },
+    {
+      "src": "/icons/icon-96.png",
+      "sizes": "96x96",
+      "type": "image/png",
+      "purpose": "maskable any"
+    },
+    {
+      "src": "/icons/icon-128.png",
+      "sizes": "128x128",
+      "type": "image/png",
+      "purpose": "maskable any"
+    },
+    {
+      "src": "/icons/icon-144.png",
+      "sizes": "144x144",
+      "type": "image/png",
+      "purpose": "maskable any"
+    },
+    {
+      "src": "/icons/icon-152.png",
+      "sizes": "152x152",
+      "type": "image/png",
+      "purpose": "maskable any"
+    },
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable any"
+    },
+    {
+      "src": "/icons/icon-384.png",
+      "sizes": "384x384",
+      "type": "image/png",
+      "purpose": "maskable any"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable any"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "নতুন অর্ডার",
+      "short_name": "নতুন অর্ডার",
+      "description": "নতুন অর্ডার তৈরি করুন",
+      "url": "/dashboard/orders/new",
+      "icons": [{ "src": "/icons/icon-96.png", "sizes": "96x96" }]
+    },
+    {
+      "name": "চলমান কাজ",
+      "short_name": "কাজের তালিকা",
+      "description": "চলমান কাজের তালিকা দেখুন",
+      "url": "/dashboard/pending-work",
+      "icons": [{ "src": "/icons/icon-96.png", "sizes": "96x96" }]
+    }
+  ]
+}
